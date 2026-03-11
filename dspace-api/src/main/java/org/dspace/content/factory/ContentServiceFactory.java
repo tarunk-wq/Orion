@@ -16,6 +16,7 @@ import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleService;
+import org.dspace.content.service.BundleMapService;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.DSpaceObjectLegacySupportService;
@@ -55,6 +56,8 @@ public abstract class ContentServiceFactory {
     public abstract BitstreamService getBitstreamService();
 
     public abstract BundleService getBundleService();
+    
+    public abstract BundleMapService getBundleMapService();
 
     public abstract CollectionService getCollectionService();
 
