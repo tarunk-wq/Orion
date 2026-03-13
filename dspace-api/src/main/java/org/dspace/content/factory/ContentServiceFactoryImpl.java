@@ -14,6 +14,7 @@ import org.dspace.content.RelationshipMetadataService;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleService;
+import org.dspace.content.service.BundleMapService;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.DSpaceObjectLegacySupportService;
@@ -52,6 +53,8 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
     private BitstreamService bitstreamService;
     @Autowired(required = true)
     private BundleService bundleService;
+    @Autowired(required = true)
+    private BundleMapService bundleMapService;
     @Autowired(required = true)
     private ItemService itemService;
     @Autowired(required = true)
@@ -110,6 +113,10 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
         return bundleService;
     }
 
+    @Override
+    public BundleMapService getBundleMapService() {
+        return bundleMapService;
+    }
     @Override
     public CollectionService getCollectionService() {
         return collectionService;
