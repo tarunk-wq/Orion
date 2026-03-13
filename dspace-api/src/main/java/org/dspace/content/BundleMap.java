@@ -32,21 +32,21 @@ public class BundleMap {
 
     /**
      * Root bundle name
-     * Example: A
+     * Example: A|B
      */
     @Column(name = "bundle", nullable = false)
     private String bundle;
 
     /**
      * Parent bundle name
-     * Example: B
+     * Example: A
      */
     @Column(name = "parent_bundle_name", nullable = false)
     private String parentBundleName;
 
     /**
      * Child bundle name
-     * Example: C
+     * Example: B
      */
     @Column(name = "child_bundle_name", nullable = false)
     private String childBundleName;
