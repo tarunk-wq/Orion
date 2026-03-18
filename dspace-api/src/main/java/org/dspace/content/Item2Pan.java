@@ -3,7 +3,10 @@ package org.dspace.content;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.dspace.content.Item;
 
 import org.dspace.content.DSpaceObject;
 import org.dspace.core.Constants;
@@ -16,8 +19,9 @@ public class Item2Pan extends DSpaceObject {
     @Column(name = "pan")
     private String pan;
 
-    @Column(name = "item_id")
-    private Integer itemId;
+    @ManyToOne
+    @JoinColumn(name = "item_id")
+    private Item item;
 
     public String getPan() {
         return pan;
@@ -27,12 +31,12 @@ public class Item2Pan extends DSpaceObject {
         this.pan = pan;
     }
 
-    public Integer getItemId() {
-        return itemId;
+    public Item getItem() {
+        return item;
     }
 
-    public void setItemId(Integer itemId) {
-        this.itemId = itemId;
+    public void setItem(Item item) {
+        this.item = item;
     }
 
     @Override

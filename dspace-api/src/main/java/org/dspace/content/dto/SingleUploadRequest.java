@@ -27,6 +27,11 @@ public class SingleUploadRequest {
      */
     private String bundle;
 
+    /*
+     * Source identifier used for request authorization
+     */
+    private String source;
+    
     /**
      * Base64 encoded file
      */
@@ -92,6 +97,14 @@ public class SingleUploadRequest {
         this.bundle = bundle;
     }
 
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
+    }
+    
     public String getFile() {
         return file;
     }

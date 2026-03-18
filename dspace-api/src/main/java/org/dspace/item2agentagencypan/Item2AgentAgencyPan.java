@@ -1,8 +1,9 @@
-package org.dspace.content;
+package org.dspace.item2agentagencypan;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import org.dspace.content.Item;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;

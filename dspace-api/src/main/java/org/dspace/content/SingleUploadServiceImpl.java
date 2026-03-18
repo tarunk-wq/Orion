@@ -1,34 +1,26 @@
 package org.dspace.content;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.sql.SQLException;
-import java.util.Base64;
 import java.util.Locale;
-import java.util.List;
-import java.util.UUID;
 
-import org.dspace.authorize.AuthorizeException;
-import org.dspace.content.dao.AgencyPanDAO;
-import org.dspace.content.dao.PanDAO;
-import org.dspace.content.dao.PrimaryTypeDAO;
-import org.dspace.content.dao.SourceTokenDAO;
-import org.dspace.content.SourceToken;
-import org.dspace.content.service.BundleMapService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.dspace.content.service.BundleService;
-import org.dspace.content.service.BitstreamService;
-import org.dspace.content.service.CollectionService;
+import org.dspace.content.dao.SourceTokenDAO;
 import org.dspace.content.dto.SingleUploadRequest;
+import org.dspace.content.service.BitstreamService;
+import org.dspace.content.service.BundleMapService;
+import org.dspace.content.service.BundleService;
+import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.SingleUploadService;
-import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.content.upload.UploadResponse;
 import org.dspace.core.Context;
+import org.dspace.item2agentagencypan.dao.AgencyPanDAO;
+import org.dspace.item2pan.dao.PanDAO;
+import org.dspace.primarytype.dao.PrimaryTypeDAO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -110,7 +102,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	    normalizeInputs(request);
 
 	    // Extract authorization fields
-	    String source = servletRequest.getParameter("source");
+	    String source = request.getSource();
 	    String token = servletRequest.getHeader("Token");
 
 	    // Authorization check
@@ -151,9 +143,6 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 	        return uploadResp;
 	    }
-
-	    // Log request
-	    logRequest(request);
 	    
 	    /*
 	     * UploadBitstream logic starts here
@@ -170,16 +159,14 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 	        if (!base64EncodedString.isEmpty() && !docType.isEmpty() && !fileType.isEmpty() && !documentName.isEmpty()) {
 
-	            String msg = "";
+	        	String msg;
 
-	            if (!(msg = validInputs(context, request)).isEmpty()) {
+	        	if (!(msg = validInputs(context, request)).isEmpty()) {
 
-	                context.abort();
+	        	    context.abort();
 
-	                uploadResp = new UploadResponse(null, UploadStatus.DATA_MISSING);
-
-	                return uploadResp;
-	            }
+	        	    return new UploadResponse(HttpStatus.BAD_REQUEST.value(), msg);
+	        	}
 	        }
 	    }
 	    
@@ -194,6 +181,10 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	    request.setBundle(trim(request.getBundle()));
 	    request.setFile(trim(request.getFile()));
 
+	    if (request.getSource() != null) {
+	        request.setSource(request.getSource().trim());
+	    }
+	    
 	    if (request.getMetadata() != null) {
 
 	        String title = request.getMetadata().get("dc.title");
@@ -265,13 +256,6 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 	    return trimmedValue;
 	}
-    
-    private void logRequest(SingleUploadRequest request) {
-
-        String logBody = "{bundle: " + request.getBundle() + ", title: " + (request.getMetadata() != null ? request.getMetadata().get("dc.title") : "null") + "}";
-
-        log.info("Single Upload Request: " + logBody);
-    }
     
     private String validInputs(Context context, SingleUploadRequest req) throws SQLException {
 
@@ -478,183 +462,5 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
         return AuthorizationStatus.AUTHORIZED;
     }
-    
-	/**
-	 * Main method executed by the controller.
-	 *
-	 * This method performs the entire upload workflow.
-	 *
-	 * Steps performed: 1. Split mapping (Parent|Child) 2. Validate mapping exists
-	 * in bundle_map table 3. Create Item with metadata 4. Check or create parent
-	 * bundle 5. Check or create child bundle 6. Decode Base64 file 7. Create
-	 * Bitstream and attach to child bundle
-	 */
-	@Override
-	public void handleSingleUpload(Context context, String bundle, String base64File, String title)
-			throws SQLException, AuthorizeException, IOException {
-
-		/**
-		 * Split bundle string into parent and child bundle names Example: "A|B"
-		 * parentName = A childName = B
-		 */
-		String[] parts = bundle.split("\\|");
-
-		String parentName = parts[0];
-		String childName = parts[1];
-
-		/**
-		 * Validate that this mapping exists in bundle_map table
-		 *
-		 * This ensures only predefined bundle hierarchies are allowed
-		 */
-		validateMapping(context, bundle, parentName, childName);
-
-		// Create a new Item and add metadata (dc.title)
-		Item item = createItemWithMetadata(context, title);
-
-		// Resolve bundle hierarchy
-		Bundle workingBundle = resolveWorkingBundle(context, bundle, item);
-
-		// Decode the Base64 file and create a Bitstream
-		// The Bitstream is then attached to the child bundle
-		addBitstream(context, workingBundle, base64File);
-
-		// Update Item after all changes are complete
-		itemService.update(context, item);
-	}
-
-	// Validates whether the given mapping exists in the bundle_map table
-	// If the mapping does not exist,the upload should be rejected
-
-	private void validateMapping(Context context, String bundle, String parent, String child) throws SQLException {
-
-		boolean exists = bundleMapService.isValidMapping(context, bundle, parent, child);
-
-		if (!exists) {
-			throw new IllegalArgumentException("Mapping does not exist in bundle_map table");
-		}
-	}
-
-	// Creates a new Item inside a predefined collection and adds metadata to it
-	// Currently only dc.title is added
-
-	private Item createItemWithMetadata(Context context, String title) throws SQLException, AuthorizeException {
-
-		// Find the collection where the item should be created
-		Collection collection = null;
-
-		if (collection == null) {
-			throw new IllegalArgumentException("Collection not found");
-		}
-
-		// Create a workspace item first (required in new tech)
-		WorkspaceItem workspaceItem = workspaceItemService.create(context, collection, false);
-
-		// Get the actual Item object from the workspace item
-		Item item = workspaceItem.getItem();
-		
-		// Add metadata: dc.title
-		// Authority and confidence are not used for this field
-		itemService.addMetadata(context, item, "dc", "title", null, null, title, null, -1, -1);
-
-		// Save item changes
-		itemService.update(context, item);
-
-		return item;
-	}
-
-	/**
-	 * This method determines the exact bundle where the uploaded file should
-	 * finally be stored.
-	 *
-	 * The hierarchy is decided using the bundle_map table.
-	 */
-	private Bundle resolveWorkingBundle(Context context, String bundleName, Item item)
-			throws SQLException, AuthorizeException {
-
-		//Find the mapping in bundle_map table
-		List<BundleMap> mappings = bundleMapService.findByBundle(context, bundleName);
-		
-		if (mappings == null || mappings.isEmpty()) {
-		    throw new IllegalArgumentException("No bundle mapping found for " + bundleName);
-		}
-
-		//For now use the first mapping
-		BundleMap mapping = mappings.get(0);
-				
-		//Extract bundle names and hierarchy
-		String parentBundleName = mapping.getParentBundleName();
-		String childBundleName = mapping.getChildBundleName();
-
-		//Find or create the parent bundle inside Item
-		Bundle parentBundle = null;
-
-		//Search existing bundles attached to the item
-		for (Bundle bundle : item.getBundles()) {
-
-			if (bundle.getName().equalsIgnoreCase(parentBundleName)) {
-				parentBundle = bundle;
-				break;
-			}
-		}
-
-		//If parent bundle does not exist, create it
-		if (parentBundle == null) {
-
-			parentBundle = bundleService.create(context, item, parentBundleName);
-		}
-
-		//Find or create the child bundle
-		Bundle childBundle = null;
-
-		// Check if child bundle already exists under parent
-		for (Bundle subBundle : parentBundle.getSubBundles()) {
-
-			if (subBundle.getName().equalsIgnoreCase(childBundleName)) {
-				childBundle = subBundle;
-				break;
-			}
-		}
-
-		//If child bundle does not exist, create it
-		if (childBundle == null) {
-
-			childBundle = bundleService.create(context, null, childBundleName);
-
-			//Attach the child bundle under parent bundle
-			parentBundle.getSubBundles().add(childBundle);
-
-			//Save changes
-			bundleService.update(context, parentBundle);
-		}
-
-		//Final bundle where the file will be uploaded
-		return childBundle;
-	}
-
-	// Decodes Base64 file and creates a Bitstream.
-	// The Bitstream is stored inside the child bundle.
-	private Bitstream addBitstream(Context context, Bundle childBundle, String base64File)
-			throws IOException, SQLException, AuthorizeException {
-
-		// Decode Base64 string into binary data.
-		byte[] decodedBytes = Base64.getDecoder().decode(base64File);
-
-		InputStream inputStream = new ByteArrayInputStream(decodedBytes);
-
-		// Create Bitstream inside the child bundle.
-		Bitstream bitstream = bitstreamService.create(context, childBundle, inputStream);
-
-		// Assign a temporary file name.
-		bitstream.setName(context, "uploaded_file");
-
-		// Save Bitstream changes.
-		bitstreamService.update(context, bitstream);
-
-		// Update bundle.
-		bundleService.update(context, childBundle);
-
-		return bitstream;
-	}
 	
 }

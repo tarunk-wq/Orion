@@ -6,14 +6,14 @@ import org.dspace.content.UploadStatus;
 
 public class UploadResponse {
 
-    private static final String SUCCESS = "000";
-    private static final String FAILURE = "400";
-    private static final String NOTFOUND = "404";
-    private static final String UNAUTHORIZED = "401";
-    private static final String INTERNAL_SERVER_ERROR = "500";
+    private static final int SUCCESS = 000;
+    private static final int FAILURE = 400;
+    private static final int NOTFOUND = 404;
+    private static final int UNAUTHORIZED = 401;
+    private static final int INTERNAL_SERVER_ERROR = 500;
 
     private UUID documentID;
-    private String errorCode;
+    private int errorCode;
     private String errorDescription;
 
     public UploadResponse() {}
@@ -76,12 +76,17 @@ public class UploadResponse {
                 break;
         }
     }
+    
+    public UploadResponse(int errorCode, String errorDescription) {
+        this.errorCode = errorCode;
+        this.errorDescription = errorDescription;
+    }
 
     public UUID getDocumentID() {
         return documentID;
     }
 
-    public String getErrorCode() {
+    public int getErrorCode() {
         return errorCode;
     }
 

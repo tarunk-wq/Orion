@@ -1,4 +1,4 @@
-package org.dspace.content;
+package org.dspace.item2pan;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -6,12 +6,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.dspace.content.Item;
 
 import org.dspace.content.DSpaceObject;
 import org.dspace.core.Constants;
+
 @Entity
-@Table(name = "item2agent_agency_pan")
-public class Item2AgentAgencyPan extends DSpaceObject {
+@Table(name = "item2pan")
+public class Item2Pan extends DSpaceObject {
 
     @Id
     @Column(name = "pan")

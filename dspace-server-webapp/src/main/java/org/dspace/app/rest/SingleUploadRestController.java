@@ -68,12 +68,9 @@ public class SingleUploadRestController {
             UploadResponse response = singleUploadService.processRequest(context, requestBody, request);
             
             if (response != null) {
-
-                return ResponseEntity
-                        .status(HttpStatus.UNAUTHORIZED)
-                        .body(response);
+                return ResponseEntity.status(HttpStatus.valueOf(response.getErrorCode())).body(response);
             }
-
+            
             context.complete();
 
             return ResponseEntity.ok("Request received");
