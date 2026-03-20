@@ -1,8 +1,16 @@
 package org.dspace.content;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.sql.SQLException;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
+import org.apache.commons.io.FilenameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.content.dao.SourceTokenDAO;
@@ -167,6 +175,8 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 	        	    return new UploadResponse(HttpStatus.BAD_REQUEST.value(), msg);
 	        	}
+	        	
+	        	// UploadBitstream logic continued, all helpers should throw exception and not return response
 	        }
 	    }
 	    
@@ -435,31 +445,35 @@ public class SingleUploadServiceImpl implements SingleUploadService {
     public AuthorizationStatus authorizeRequest(Context context, String source, String token)
             throws SQLException {
 
-        // Replicates UploadBitstream logic exactly
-
-        if (token == null || token.trim().isEmpty()) {
-            return AuthorizationStatus.MISSING_TOKEN;
-        }
-
+        // 1️ Check source FIRST
         if (source == null || source.trim().isEmpty()) {
             return AuthorizationStatus.MISSING_SOURCE;
         }
 
-        // Find source in DB
+        // 2️ Fetch source from DB
         SourceToken tokenRow = sourceTokenDAO.findBySource(context, source);
 
+        // 3 row null check
         if (tokenRow == null) {
             return AuthorizationStatus.UNRECOGNIZED_SOURCE;
         }
 
+        // 4 Check if active
         if (!tokenRow.isActive()) {
             return AuthorizationStatus.DEACTIVATED_TOKEN;
         }
 
-        if (!tokenRow.getToken().equals(token)) {
+        // 5 Only now check token
+        if (token == null || token.trim().isEmpty()) {
+            return AuthorizationStatus.MISSING_TOKEN;
+        }
+
+        // 6 Compare token
+        if (!token.equals(tokenRow.getToken())) {
             return AuthorizationStatus.INVALID_TOKEN;
         }
 
+        // 7 Success
         return AuthorizationStatus.AUTHORIZED;
     }
 	
