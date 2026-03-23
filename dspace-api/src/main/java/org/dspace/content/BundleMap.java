@@ -9,44 +9,44 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.UniqueConstraint;
 
 import java.util.UUID;
+
 /**
  * Hibernate Entity for bundle_map table.
  *
  * includes:
- * - bundle 
+ * - bundle
  * - parent bundle name
  * - child bundle name
  */
 @Entity
-@Table(name = "bundle_map",
-       uniqueConstraints = {
-           // Prevent duplicate parent-child mapping
-           @UniqueConstraint(columnNames = { "bundle", "parent_bundle_name", "child_bundle_name"
-           })
-       })
+@Table(name = "bundle_map", uniqueConstraints = {
+        // Prevent duplicate parent-child mapping
+        @UniqueConstraint(columnNames = { "bundle", "parent_bundle_name", "child_bundle_name"
+        })
+})
 public class BundleMap {
 
-	@Id
-	@GeneratedValue
-	private UUID id;
+    @Id
+    @GeneratedValue
+    private UUID id;
 
     /**
      * Root bundle name
-     * Example: A
+     * Example: A|B
      */
     @Column(name = "bundle", nullable = false)
     private String bundle;
 
     /**
      * Parent bundle name
-     * Example: B
+     * Example: A
      */
     @Column(name = "parent_bundle_name", nullable = false)
     private String parentBundleName;
 
     /**
      * Child bundle name
-     * Example: C
+     * Example: B
      */
     @Column(name = "child_bundle_name", nullable = false)
     private String childBundleName;

@@ -209,6 +209,24 @@ public class Utils {
     private static GroupService groupService;
 
     @Autowired
+    public static final int SUCCESS = 0;
+    
+    @Autowired
+    public static final int MISSING_SOURCE = 1;
+    
+    @Autowired
+    public static final int UNRECOGNIZED_SOURCE = 2;
+    
+    @Autowired
+    public static final int DEACTIVATED_TOKEN = 3;
+    
+    @Autowired
+    public static final int MISSING_TOKEN = 4;
+    
+    @Autowired
+    public static final int INVALID_TOKEN = 5;
+    
+    @Autowired
     private static AuthorizeService authorizeService;
     
     @Autowired(required = true)
@@ -1812,4 +1830,5 @@ public class Utils {
 		String path = getTopToBottomHierarchy(owningCollection);
 		return path.replace("/", "_");
 	}
+	
 }
