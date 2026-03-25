@@ -1,5 +1,6 @@
 package org.dspace.content.service;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
@@ -9,6 +10,8 @@ public interface FileFormatService {
 
     String checkIfValidFile(byte[] bytes)
             throws IOException, InvalidFileFormatException;
+    
+    String checkIfValidFile(File file) throws IOException, InvalidFileFormatException;
     
     List<String> getPdfFormats();
 

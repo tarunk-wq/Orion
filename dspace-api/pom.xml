@@ -365,6 +365,11 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+		    <groupId>com.emailtopdf</groupId>
+		    <artifactId>emailtopdf</artifactId>
+		    <version>1.0.0</version>
+		</dependency>
 		<dependency>
 		    <groupId>org.springframework.boot</groupId>
 		    <artifactId>spring-boot-starter-web</artifactId>
