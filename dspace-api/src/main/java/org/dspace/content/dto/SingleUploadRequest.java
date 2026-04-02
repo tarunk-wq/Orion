@@ -376,4 +376,12 @@ public class SingleUploadRequest {
     public void setMaskedDoc(boolean maskedDoc) {
         this.maskedDoc = maskedDoc;
     }
+    
+    public String getCorpName() {
+        return corporateName;
+    }
+
+    public String getSubscrName() {
+        return subscriberName;
+    }
 }
