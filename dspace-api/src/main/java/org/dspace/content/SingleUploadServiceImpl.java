@@ -30,6 +30,7 @@ import org.dspace.content.service.BundleService;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.FileFormatService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.PdfConverterService;
 import org.dspace.content.service.SingleUploadService;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.content.upload.UploadConstants;
@@ -80,6 +81,9 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
 
+	@Autowired
+	private PdfConverterService pdfConverterService;
+	
 	@Autowired
 	private PanDAO panDAO;
 
@@ -388,8 +392,8 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 				tempFile.mkdir();
 			}
 
-			// Convert HTML to PDF (legacy logic - to be plugged later)
-			// PdfConverter.htmlToPDF(...)
+			// Convert HTML to PDF (legacy logic)
+			tempFile = pdfConverterService.convertHtmlToPdf(decodedBytes, tempFile, docName);
 
 			isHtml = true;
 			isConverted = true;
@@ -406,7 +410,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 			}
 
 			// Convert TXT to PDF
-			// PdfConverter.textToPDF(...)
+			tempFile = pdfConverterService.convertTextToPdf(decodedBytes, tempFile, docName);
 
 			isTxt = true;
 			isConverted = true;
@@ -423,7 +427,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 			}
 
 			// Convert Image to PDF
-			// PdfConverter.convertImageToPdf(...)
+			tempFile = pdfConverterService.convertImageToPdf(decodedBytes, tempFile, docName);
 
 			isImg = true;
 			isConverted = true;
@@ -433,28 +437,17 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 		else if (fileFormatService.getTiffFormats().contains(fileMimeType)
 				&& (fileExtension.equalsIgnoreCase("tiff") || fileExtension.equalsIgnoreCase("tif"))) {
 
-			// First temp directory creation
-			tempFile = new File(System.getProperty("java.io.tmpdir"), "TxtToPDF_" + System.currentTimeMillis());
-
+			// Step 1: create temp directory
+			tempFile = new File(System.getProperty("java.io.tmpdir"), "TiffToPDF_" + System.currentTimeMillis());
 			if (!tempFile.exists()) {
-				tempFile.mkdir();
+			    tempFile.mkdir();
 			}
 
-			// First conversion step (legacy behavior)
-			// PdfConverter.textToPDF(...)
+			// Create output PDF file
+			File outputPdf = new File(tempFile, docName + ".pdf");
 
-			isConverted = true;
-
-			// Then create another temp file 
-			try {
-				tempFile = File.createTempFile("ImagetoPdf_" + System.currentTimeMillis(),
-						"_" + Thread.currentThread().getId());
-			} catch (IOException e) {
-				throw e;
-			}
-
-			// Final TIFF -> PDF conversion
-			// PdfConverter.convertTiffToPdf(...)
+			// Step 2: convert TIFF directly
+			tempFile = pdfConverterService.convertTiffToPdf(decodedBytes, outputPdf);
 
 			isConverted = true;
 		}
@@ -471,7 +464,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 			}
 
 			// Convert email to PDF and extract metadata/attachments
-			// unconvertedFileMap = PdfConverter.emailToPdf(...)
+			unconvertedFileMap = pdfConverterService.convertEmailToPdf(decodedBytes, tempFile, docName);
 
 			isEml = true;
 			isConverted = true;
@@ -490,7 +483,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 			}
 
 			// Convert Office file to PDF
-			// PdfConverter.officeToPdf(...)
+			tempFile = pdfConverterService.convertOfficeToPdf(decodedBytes, tempFile, docName);
 
 			isDoc = true;
 			isConverted = true;
@@ -679,31 +672,69 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 		}
 
 		// SEARCH USING DISCOVERY (SOLR)
+		// Create a new DiscoverQuery object (used to query Solr index)
 		DiscoverQuery query = new DiscoverQuery();
+
+		// Set the actual search query string (e.g., dc.pan_keyword:"ABCDE1234F")
 		query.setQuery(searchQuery);
+
+		// Apply filter so that only DSpace Items are returned (not collections/communities)
+		// this method expects a String, so we convert the int constant
 		query.setDSpaceObjectFilter(String.valueOf(Constants.ITEM));
+
+		// Limit results to only 1 item (since identifiers are unique, only one match is needed)
 		query.setMaxResults(1);
 
+		// Create DSpace object 
 		DSpace dspace = new DSpace();
-		SearchService searcher = dspace.getServiceManager().getServiceByName(SearchService.class.getName(),
-				SearchService.class);
 
+		// Get SearchService bean from DSpace ServiceManager
+		// This service is responsible for executing Solr (Discovery) queries
+		SearchService searcher = dspace.getServiceManager().getServiceByName(SearchService.class.getName(), SearchService.class);
+
+		// Execute the search query using the current DSpace context
+		// This sends the query to Solr and retrieves results
 		DiscoverResult resp = searcher.search(context, query);
 
+		// Check if any results were found in Solr
 		if (resp.getTotalSearchResults() > 0) {
+
+		    // If results exist:
+		    // getIndexableObjects() -> returns list of wrapped objects
+		    // get(0) -> get first result (since maxResults = 1)
+		    // getIndexedObject() -> extract actual DSpace object
+		    // Cast to Item because we know we filtered only Items
 		    item = (Item) resp.getIndexableObjects().get(0).getIndexedObject();
+
 		} else {
 
-			//  FALLBACK TO DATABASE
-			log.info("Finding entry in database for : " + searchValue);
+		    // If item was NOT found in Solr:
+		    // This usually happens if item is not indexed yet or index is out-of-date
 
-			List<Integer> itemIds = jdbcTemplate.query(selectQuery, ps -> ps.setString(1, searchValue), (rs, rowNum) -> rs.getInt("item_id"));
-			
-			if (!itemIds.isEmpty()) {
-				item = itemService.find(context, UUID.fromString(itemIds.get(0).toString()));
-			}
+		    // Log message for debugging (helps track fallback cases)
+		    log.info("Finding entry in database for : " + searchValue);
+
+		    // Execute SQL query using JdbcTemplate (Spring way, replaces DatabaseManager)
+		    // ps -> sets parameter value in query 
+		    // rs -> extracts "item_id" column from result set
+		    List<Integer> itemIds = jdbcTemplate.query(selectQuery, ps -> ps.setString(1, searchValue), (rs, rowNum) -> rs.getInt("item_id"));
+
+		    // Check if database returned any matching rows
+		    if (!itemIds.isEmpty()) {
+
+		        // Extract item_id
+		        Integer itemId = itemIds.get(0);
+
+		        // Fetch Item using native query 
+		        List<Item> items = itemService.findByCustomNativeQuery(context, "SELECT * FROM item WHERE item_id = " + itemId);
+
+		        if (!items.isEmpty()) {
+		            item = items.get(0);
+		        }
+		    }
 		}
 
+		// Return the found Item (or null if not found in both Solr and DB)
 		return item;
 	}
 
