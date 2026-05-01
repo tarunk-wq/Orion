@@ -42,9 +42,6 @@ public class SingleUploadRestController {
 	public ResponseEntity<?> singleUpload(@RequestBody SingleUploadRequest requestBody, HttpServletRequest request)
 			throws SQLException {
 
-		log.info("API HIT: SINGLE UPLOAD");
-	    log.info("Request Body: {}", requestBody);
-	    System.out.println("SYSTEM OUT HIT");
 		Context context = null;
 
 		try {
