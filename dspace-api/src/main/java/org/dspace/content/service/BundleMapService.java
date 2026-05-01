@@ -29,4 +29,10 @@ public interface BundleMapService {
 
     // Delete mapping
     void delete(Context context, UUID id) throws SQLException;
+    
+    /*
+     * Returns first BundleMap entry for given bundle name.
+     * Used as replacement for legacy querySingle() behavior.
+     */
+    BundleMap findFirstByBundle(Context context, String bundle) throws SQLException;
 }

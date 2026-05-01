@@ -20,7 +20,7 @@ import org.dspace.core.Constants;
 public class Item2Pran extends DSpaceObject {
 
     // PRAN is used as primary key (same pattern as PAN, ACK)
-    @Id
+    
     @Column(name = "pran")
     private String pran;
 

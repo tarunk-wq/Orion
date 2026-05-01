@@ -20,7 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 public interface SingleUploadService {
     
     public UploadResponse processRequest(Context context, SingleUploadRequest request, HttpServletRequest servletRequest)
-            		throws SQLException, AuthorizeException;
+            		throws SQLException, AuthorizeException, Exception;
     
     AuthorizationStatus authorizeRequest(Context context,
             String source,

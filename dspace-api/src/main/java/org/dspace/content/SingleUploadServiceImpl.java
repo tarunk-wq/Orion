@@ -7,8 +7,10 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -17,24 +19,34 @@ import java.util.UUID;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.util.Date;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.dspace.audittrail.service.AuditTrailService;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.ResourcePolicy;
+import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.cbo2cho.dao.CboDAO;
 import org.dspace.content.dao.SourceTokenDAO;
+import org.dspace.content.dto.EmlProcessingResult;
 import org.dspace.content.dto.FileProcessingResult;
+import org.dspace.content.dto.OriginalFileProcessingResult;
 import org.dspace.content.dto.SingleUploadRequest;
 import org.dspace.content.exception.InvalidFileFormatException;
+import org.dspace.content.service.BitstreamMetadataService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleMapService;
+import org.dspace.content.service.BundleResolverService;
 import org.dspace.content.service.BundleService;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.FileFormatService;
+import org.dspace.content.service.FileProcessingService;
 import org.dspace.content.service.InstallItemService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.PdfConverterService;
@@ -48,6 +60,9 @@ import org.dspace.discovery.DiscoverQuery;
 import org.dspace.discovery.DiscoverResult;
 import org.dspace.discovery.SearchService;
 import org.dspace.discovery.SearchServiceException;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.service.GroupService;
+import org.dspace.event.service.EventService;
 import org.dspace.item2ackno.Item2AckNo;
 import org.dspace.item2ackno.dao.AckDAO;
 import org.dspace.item2agency.Item2Agency;
@@ -64,13 +79,16 @@ import org.dspace.item2pran.Item2Pran;
 import org.dspace.item2pran.dao.PranDAO;
 import org.dspace.item2primary.Item2Primary;
 import org.dspace.item2primary.dao.PrimaryDAO;
+import org.dspace.content.service.OriginalDocMapService;
 import org.dspace.primarytype.dao.PrimaryTypeDAO;
 import org.dspace.services.ConfigurationService;
+import org.dspace.usage.UsageEvent;
 import org.dspace.utils.DSpace;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
@@ -121,7 +139,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 	@Autowired
 	private PrimaryDAO primaryDAO;
-	
+
 	@Autowired
 	private CboDAO cboDAO;
 
@@ -129,7 +147,28 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	private InstallItemService installItemService;
 
 	@Autowired
-	private JdbcTemplate jdbcTemplate;
+	private BundleResolverService bundleResolverService;
+
+	@Autowired
+	private EventService eventService;
+
+	@Autowired
+	private AuditTrailService auditTrailService;
+
+	@Autowired
+	private OriginalDocMapService originalDocMapService;
+
+	@Resource
+	private ResourcePolicyService resourcePolicyService;
+
+	@Resource
+	private GroupService groupService;
+
+	@Autowired
+	private BitstreamMetadataService bitstreamMetadataService;
+
+	@Autowired
+	private FileProcessingService fileProcessingService;
 
 	@Autowired
 	private PdfConverterService pdfConverterService;
@@ -167,12 +206,41 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	private static final String SIMPLE_REGEX = ".*[#$%><!~].*";
 
 	// Fetch collection UUIDs from config
-	String defaultCollectionId = configurationService.getProperty("dspace.default.collection.id");
-	String notsrCollectionId = configurationService.getProperty("dspace.other.primtype.collection.id");
+	// Just declare
+	private UUID defaultCollectionUUID;
+	private UUID notsrCollectionUUID;
 
-	// Convert to UUID
-	UUID defaultCollectionUUID = UUID.fromString(defaultCollectionId);
-	UUID notsrCollectionUUID = UUID.fromString(notsrCollectionId);
+	// Initialize values after Spring injects dependencies to avoid null errors
+	@PostConstruct
+	public void init() {
+
+		// Fetch values from configuration file
+		String defaultCollectionId = configurationService.getProperty("dspace.default.collection.id");
+
+		String notsrCollectionId = configurationService.getProperty("dspace.other.primtype.collection.id");
+
+		// Convert default collection ID safely
+		if (defaultCollectionId != null && !defaultCollectionId.isEmpty()) {
+			try {
+				this.defaultCollectionUUID = UUID.fromString(defaultCollectionId);
+			} catch (IllegalArgumentException e) {
+				log.error("Invalid UUID format for defaultCollectionId: " + defaultCollectionId);
+			}
+		} else {
+			log.warn("defaultCollectionId is missing in configuration");
+		}
+
+		// Convert NOTSR collection ID safely
+		if (notsrCollectionId != null && !notsrCollectionId.isEmpty()) {
+			try {
+				this.notsrCollectionUUID = UUID.fromString(notsrCollectionId);
+			} catch (IllegalArgumentException e) {
+				log.error("Invalid UUID format for notsrCollectionId: " + notsrCollectionId);
+			}
+		} else {
+			log.warn("notsrCollectionId is missing in configuration");
+		}
+	}
 
 	/**
 	 * Temporary fixed collection UUID, i need to see if this is to be used layer
@@ -186,14 +254,22 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 	@Override
 	public UploadResponse processRequest(Context context, SingleUploadRequest request,
-			HttpServletRequest servletRequest) throws SQLException, AuthorizeException {
+			HttpServletRequest servletRequest) throws SQLException, AuthorizeException, Exception {
 
+		/*
+		 * Capture start time before processing begins
+		 */
+		long startTime = System.currentTimeMillis();
+
+		log.info("Normalize Inputs");
+		
 		// Normalize inputs
 		normalizeInputs(request);
 
 		// Extract authorization fields
 		String source = request.getSource();
 		String token = servletRequest.getHeader("Token");
+		token = (token == null) ? "" : token.trim();
 
 		// Authorization check
 		AuthorizationStatus status = authorizeRequest(context, source, token);
@@ -238,173 +314,543 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 		 * UploadBitstream logic starts here
 		 */
 
-		boolean isDocUploaded = request.getFile() != null && !request.getFile().trim().isEmpty();
+		File tempFile = null;
+		InputStream inputStream = null;
+		Map<String, List<String>> unconvertedFileMap = new HashMap<>();
 
-		if (isDocUploaded) {
+		try {
+			boolean isDocUploaded = request.getFile() != null && !request.getFile().trim().isEmpty();
 
-			String base64EncodedString = request.getFile();
-			String docType = request.getDocumentType();
-			String fileType = request.getFileType();
-			String documentName = request.getDocumentName();
+			if (isDocUploaded) {
 
-			if (!base64EncodedString.isEmpty() && !docType.isEmpty() && !fileType.isEmpty()
-					&& !documentName.isEmpty()) {
+				String base64EncodedString = request.getFile();
+				String docType = request.getDocumentType();
+				String fileType = request.getFileType();
+				String documentName = request.getDocumentName();
 
-				String msg;
+				if (!base64EncodedString.isEmpty() && !docType.isEmpty() && !fileType.isEmpty()
+						&& !documentName.isEmpty()) {
 
-				if (!(msg = validInputs(context, request)).isEmpty()) {
+					String msg;
 
-					context.abort();
+					if (!(msg = validInputs(context, request)).isEmpty()) {
 
-					return new UploadResponse(HttpStatus.BAD_REQUEST.value(), msg);
-				}
+						context.abort();
 
-				// UploadBitstream logic continued, all helpers should throw exception and not
-				// return response
+						return new UploadResponse(HttpStatus.BAD_REQUEST.value(), msg);
+					}
 
-				byte[] decodedBytes;
+					/*
+					 * Insert initial audit trail (same as legacy Upload API Request log)
+					 */
+					auditTrailService.insert(context, servletRequest.getRequestURI(), // API endpoint
+							"Upload API Request", // action
+							request.toString() // full request body (same as reqBody)
+					);
 
-				try {
-					decodedBytes = decodeFile(base64EncodedString);
-				} catch (IllegalArgumentException e) {
+					// UploadBitstream logic continued, all helpers should throw exception and not
+					// return response
 
-					context.abort();
+					byte[] decodedBytes;
 
-					return new UploadResponse(HttpStatus.BAD_REQUEST.value(), "Invalid Base64 file");
-				}
+					try {
+						decodedBytes = decodeFile(base64EncodedString);
+					} catch (IllegalArgumentException e) {
 
-				String mimeType;
+						context.abort();
 
-				try {
-					mimeType = validateFileFormat(decodedBytes);
-				} catch (InvalidFileFormatException e) {
+						return new UploadResponse(HttpStatus.BAD_REQUEST.value(), "Invalid Base64 file");
+					}
 
-					context.abort();
-					return new UploadResponse(null, UploadStatus.INVALID_FILEFORMAT);
+					String mimeType;
 
-				} catch (IOException e) {
+					try {
+						mimeType = validateFileFormat(decodedBytes);
+					} catch (InvalidFileFormatException e) {
 
-					context.abort();
-					return new UploadResponse(null, UploadStatus.INTERNAL_SERVER_ERROR);
-				}
+						context.abort();
+						return new UploadResponse(null, UploadStatus.INVALID_FILEFORMAT);
 
-				String cleanDocumentName = validateFileExtension(documentName, fileType);
+					} catch (IOException e) {
 
-				if (cleanDocumentName == null) {
-					context.abort();
-					return new UploadResponse(null, UploadStatus.FILE_FORMAT_MISSMATCH);
-				}
+						context.abort();
+						return new UploadResponse(null, UploadStatus.INTERNAL_SERVER_ERROR);
+					}
 
-				documentName = cleanDocumentName;
+					String cleanDocumentName = validateFileExtension(documentName, fileType);
 
-				InputStream inputStream = null;
-				Map<String, List<String>> unconvertedFileMap = new HashMap<>();
+					if (cleanDocumentName == null) {
+						context.abort();
+						return new UploadResponse(null, UploadStatus.FILE_FORMAT_MISSMATCH);
+					}
 
-				// Call processFile() -> this replaces legacy convertToPDF() logic
-				FileProcessingResult fileResult;
+					documentName = cleanDocumentName;
 
-				try {
-					fileResult = processFile(mimeType, documentName, fileType, decodedBytes);
-				} catch (IOException e) {
-					throw new RuntimeException("Error processing file", e);
-				}
+					// Call processFile() -> this replaces legacy convertToPDF() logic
+					FileProcessingResult fileResult;
 
-				// Check if processing was successful
-				// (Same as: if(objArr != null) in legacy code)
-				if (fileResult != null) {
+					try {
+						fileResult = processFile(mimeType, documentName, fileType, decodedBytes);
+					} catch (IOException e) {
+						context.abort();
+						log.error("Error processing file", e);
+						return new UploadResponse(null, UploadStatus.INTERNAL_SERVER_ERROR);
+					}
 
-					// Check whether file was converted to PDF or not
-					boolean isConverted = fileResult.isConverted();
+					// Extract temp file here
+					if (fileResult != null) {
+						tempFile = fileResult.getTempFile();
+					}
+					// Declare at top (before fileResult logic)
+					Bitstream orgBitstream = null;
+					boolean isEml = false;
+					boolean isDoc = false;
+					boolean isHtml = false;
+					boolean isTxt = false;
+					boolean isImg = false;
+					// Check if processing was successful
+					// (Same as: if(objArr != null) in legacy code)
+					if (fileResult != null) {
 
-					// If file was converted (i.e., NOT originally a PDF)
-					if (isConverted) {
+						// Check whether file was converted to PDF or not
+						boolean isConverted = fileResult.isConverted();
 
-						// Get file type flags (these tell what type of file it originally was)
-						boolean isEml = fileResult.isEml(); // email file
-						boolean isDoc = fileResult.isDoc(); // office document
-						boolean isHtml = fileResult.isHtml(); // html file
-						boolean isTxt = fileResult.isTxt(); // text/csv file
-						boolean isImg = fileResult.isImg(); // image file
+						// If file was converted (i.e., NOT originally a PDF)
+						if (isConverted) {
 
-						// Get the temporary file where converted PDF is stored
-						File tempFile = fileResult.getTempFile();
+							// Get file type flags (these tell what type of file it originally was)
+							isEml = fileResult.isEml(); // email file
+							isDoc = fileResult.isDoc(); // office document
+							isHtml = fileResult.isHtml(); // html file
+							isTxt = fileResult.isTxt(); // text/csv file
+							isImg = fileResult.isImg(); // image file
 
-						/*
-						 * If file is NOT any special type (doc, eml, html, txt, img), then it means it
-						 * is a normal converted PDF file.
-						 *
-						 * So we create InputStream from the temp file -> This will later be used to
-						 * create Bitstream
-						 */
-						if (!isDoc && !isEml && !isHtml && !isTxt && !isImg) {
+							// Get the temporary file where converted PDF is stored
+							tempFile = fileResult.getTempFile();
 
-							try {
-								inputStream = new FileInputStream(tempFile);
-							} catch (FileNotFoundException e) {
-								throw new RuntimeException("Temp file not found", e);
+							/*
+							 * If file is NOT any special type (doc, eml, html, txt, img), then it means it
+							 * is a normal converted PDF file.
+							 *
+							 * So we create InputStream from the temp file -> This will later be used to
+							 * create Bitstream
+							 */
+							if (!isDoc && !isEml && !isHtml && !isTxt && !isImg) {
+
+								try {
+									inputStream = new FileInputStream(tempFile);
+								} catch (FileNotFoundException e) {
+									context.abort();
+									log.error("Temp file not found", e);
+									return new UploadResponse(null, UploadStatus.INTERNAL_SERVER_ERROR);
+								}
 							}
-						}
 
-						/*
-						 * Special case: EML files (email files)
-						 *
-						 * Instead of using InputStream, we store metadata (attachments, content, etc.)
-						 */
-						else if (isEml) {
+							/*
+							 * Special case: EML files (email files)
+							 *
+							 * Instead of using InputStream, we store metadata (attachments, content, etc.)
+							 */
+							else if (isEml) {
 
-							unconvertedFileMap = fileResult.getUnconvertedFileMap();
+								unconvertedFileMap = fileResult.getUnconvertedFileMap();
+							}
+
+						} else {
+							/*
+							 * If NOT converted -> file was already a PDF
+							 *
+							 * So we directly use original input stream (no temp file needed)
+							 */
+							inputStream = fileResult.getInputStream();
 						}
 
 					} else {
 						/*
-						 * If NOT converted -> file was already a PDF
+						 * If processFile() returned null → means file format is invalid / conversion
+						 * failed
 						 *
-						 * So we directly use original input stream (no temp file needed)
+						 * So we abort the transaction and return error
 						 */
-						inputStream = fileResult.getInputStream();
+						context.abort();
+						return new UploadResponse(null, UploadStatus.FILE_FORMAT_MISSMATCH);
 					}
 
-				} else {
-					/*
-					 * If processFile() returned null → means file format is invalid / conversion
-					 * failed
-					 *
-					 * So we abort the transaction and return error
-					 */
-					context.abort();
-					return new UploadResponse(null, UploadStatus.FILE_FORMAT_MISSMATCH);
-				}
+					Item dspaceItem = null;
 
-				Item dspaceItem = null;
-
-				try {
 					if (request.getLegacyType() == null || request.getLegacyType().isEmpty()) {
 						dspaceItem = findExistingItem(context, request);
 					}
-				} catch (Exception e) {
-					throw new RuntimeException("Error while finding existing item", e);
-				}
 
+					if (dspaceItem == null) {
+						dspaceItem = createItem(context, request);
+					}
+
+					// updateotherfields() foes here
+					// 1. Parse createdDate (from request)
+					String parsedCreatedDate = parseCreatedDate(request.getCreatedDate());
+
+					// 2. Generate system item creation date
+					String itemCreationDate = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+
+					// 3. Update metadata + validations
+					updateOtherFields(context, dspaceItem, request, parsedCreatedDate, itemCreationDate);
+
+					// 4. Logging (keep it simple for now)
+					log.info("Adding bitstream to item(id=" + dspaceItem.getID() + ").");
+
+					// event handling logic (not usre how to implement this part yet)
+					/*
+					 * try { UsageEvent usageEvent = new UsageEvent( UsageEvent.Action.UPDATE,
+					 * context, dspaceItem, null, user_ip, user_agent, xforwardedfor, request,
+					 * headers );
+					 * 
+					 * eventService.fireEvent(usageEvent);
+					 * 
+					 * } catch (Exception e) { log.warn("Failed to write stats", e); }
+					 */
+
+					Bundle workingBundle = bundleResolverService.resolveWorkingBundle(context, docType,
+							request.getPrimary(), dspaceItem);
+
+					/*
+					 * Handle EML file (replaces UploadUtil.handleEMLFile)
+					 */
+					if (isEml) {
+
+						// Call service method instead of static Util
+						EmlProcessingResult result = fileProcessingService.handleEmlFile(context, dspaceItem,
+								workingBundle, tempFile, documentName, request.getCreatedDate(), source,
+								request.getRequirementId(), request.getCreatedBy(), unconvertedFileMap);
+
+						// Extract values from DTO (replaces Object[] indexing)
+						inputStream = result.getInputStream();
+						orgBitstream = result.getOriginalBitstream();
+
+						// workingBundle may be updated inside EML processing
+						workingBundle = result.getWorkingBundle();
+					} else if (isDoc || isHtml || isTxt || isImg) {
+
+						// Call service to process non-EML files (stores original file and prepares
+						// InputStream)
+						OriginalFileProcessingResult result = fileProcessingService.handleOriginalFile(context,
+								dspaceItem, tempFile, request.getCreatedDate(), source, request.getRequirementId(),
+								request.getCreatedBy());
+
+						// Get InputStream for further upload processing (replaces objects[0])
+						inputStream = result.getInputStream();
+
+						// Get original bitstream stored in ORIGINAL bundle (replaces objects[1])
+						orgBitstream = result.getOriginalBitstream();
+					}
+
+					/*
+					 * Create bitstream in working bundle
+					 *
+					 * Uses InputStream (already prepared earlier) Same as:
+					 * workingBundle.createBitstream(inputStream)
+					 */
+					Bitstream dspaceBitstream = bitstreamService.create(context, workingBundle, inputStream);
+
+					/*
+					 * Set bitstream name
+					 *
+					 * Same logic as legacy -> documentName + ".pdf"
+					 */
+					String bitstreamName = documentName + ".pdf";
+
+					/*
+					 * Add metadata to bitstream
+					 *
+					 * using helper service (same as EML + original flow) Includes: - name - MIME
+					 * type - createdDate - createdBy - requirementId - source - masked flag
+					 */
+					bitstreamMetadataService.addBitstreamMetadata(context, dspaceBitstream, bitstreamName,
+							request.getCreatedDate(), request.getRequirementId(), request.getCreatedBy(), source,
+							request.isMaskedDoc());
+
+					/*
+					 * Set description if provided
+					 *
+					 * Same as legacy: dspaceBitstream.setDescription(description)
+					 */
+					if (request.getDescription() != null) {
+						dspaceBitstream.setDescription(context, request.getDescription());
+					}
+
+					// createbitstreampolicy foes here
+					if (request.getGroupId() != null) {
+						createBitstreamPolicy(context, dspaceBitstream, request.getGroupId(), request.getYear(),
+								request.getMonth(), request.getDay());
+					}
+
+					/*
+					 * Get bitstream UUID
+					 *
+					 * Same as legacy: bitstreamID = dspaceBitstream.getID()
+					 */
+					UUID bitstreamID = dspaceBitstream.getID();
+
+					/*
+					 * Save bitstream to database
+					 *
+					 * Same as: dspaceBitstream.update()
+					 */
+					bitstreamService.update(context, dspaceBitstream);
+
+					/*
+					 * Persist working bundle changes
+					 *
+					 * Same as: workingBundle.update()
+					 */
+					bundleService.update(context, workingBundle);
+
+					/*
+					 * Persist item changes
+					 *
+					 * Same as: dspaceItem.update()
+					 */
+					itemService.update(context, dspaceItem);
+
+					/*
+					 * This block runs only when the uploaded file type requires conversion (like
+					 * EML, DOC, TXT, etc). After conversion, we store a mapping between the
+					 * original file and the converted file in the database.
+					 */
+					if (isEml || isDoc || isHtml || isTxt || isImg) {
+
+						// orgBitstream = file before conversion (e.g., .eml, .doc)
+						// dspaceBitstream = file after conversion (e.g., PDF)
+
+						// Call service to store mapping between original and converted file
+						originalDocMapService.createMapping(context, orgBitstream, dspaceBitstream);
+					}
+
+					/*
+					 * This block creates an audit log entry after a successful document upload. It
+					 * stores important details like document ID, type, user, source, etc. This
+					 * replaces the legacy AuditTrail.insert() using Spring service layer.
+					 */
+
+					/*
+					 * Extract request URI from servlet request
+					 */
+					String requestURI = servletRequest.getRequestURI();
+
+					/*
+					 * Create audit message in legacy format using DTO values
+					 */
+					String auditString = "Document id|" + bitstreamID + "|doc Type|" + request.getDocumentType()
+							+ "|user|" + request.getCreatedBy() + "|source|" + request.getSource() + "|masked|"
+							+ request.isMaskedDoc();
+
+					// Insert audit record into database using service layer
+					// handle -> request URI, action -> type of operation, url -> full audit message
+					auditTrailService.insert(context, requestURI, // API endpoint
+							"Upload Document", // action
+							auditString + " " + request.toString() // full audit details
+					);
+
+					// Prepare response object to return success
+					uploadResp = new UploadResponse(dspaceBitstream, UploadStatus.SUCCESS);
+
+					// Commit the transaction (save all DB changes permanently)
+					context.complete();
+
+					// Log success message only when a document is actually uploaded and bitstream
+					// is created successfully
+					if (isDocUploaded && uploadResp != null && bitstreamID != null) {
+						log.info("Bitstream(id={}) successfully added into item.", bitstreamID);
+					}
+
+					// Capture end time after upload is finished
+					long endTime = System.currentTimeMillis();
+
+					// Log total time taken for upload (useful for performance monitoring)
+					log.info("#Total time taken to upload doc : {} ms", (endTime - startTime));
+				} else {
+
+					/*
+					 * This executes when required fields are missing
+					 */
+
+					// Abort transaction
+					context.abort();
+
+					// Default error message
+					String errMsg = "Bundle path is not available. [" + request.toString() + "]";
+
+					if (base64EncodedString.isEmpty()) {
+						errMsg = "Base64 Image is missing. [" + request.toString() + "]";
+					} else if (docType.isEmpty()) {
+						errMsg = "Document Type is missing. [" + request.toString() + "]";
+					} else if (documentName.isEmpty()) {
+						errMsg = "Document Name is missing. [" + request.toString() + "]";
+					} else if (fileType.isEmpty()) {
+						errMsg = "File Extension is missing. [" + request.toString() + "]";
+					}
+
+					// Log error
+					log.error(errMsg);
+
+					/*
+					 * Return response
+					 */
+					return new UploadResponse(HttpStatus.BAD_REQUEST.value(), errMsg);
+				}
+			} else {
+
+				/*
+				 * No document uploaded -> update existing item only
+				 */
+
+				// Find existing item (NO creation allowed)
+				Item dspaceItem = findExistingItem(context, request);
+
+				/*
+				 * If item not found -> abort + return NOT_FOUND
+				 */
 				if (dspaceItem == null) {
-					dspaceItem = createItem(context, request);
+
+					context.abort();
+
+					return new UploadResponse(null, UploadStatus.NOTFOUND);
+					// Controller should map this to HTTP 404
 				}
 
-				// updateotherfields() foes here
-				// 1. Parse createdDate (from request)
-				String parsedCreatedDate = parseCreatedDate(request.getCreatedDate());
+				/*
+				 * Update metadata fields
+				 */
+				updateOtherFields(context, dspaceItem, request, request.getCreatedDate(), null);
 
-				// 2. Generate system item creation date
-				String itemCreationDate = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+				/*
+				 * Persist item changes
+				 */
+				itemService.update(context, dspaceItem);
 
-				// 3. Update metadata + validations
-				updateOtherFields(context, dspaceItem, request, parsedCreatedDate, itemCreationDate);
+				/*
+				 * Insert audit trail
+				 */
+				auditTrailService.insert(context, servletRequest.getRequestURI(), "Upload API - Update Fields Only",
+						request.toString());
 
-				// 4. Logging (keep it simple for now)
-				log.info("Adding bitstream to item(id=" + dspaceItem.getID() + ").");
+				/*
+				 * Logging
+				 */
+				log.info("Updated fields without uploading document for item (id=" + dspaceItem.getID() + ").");
+
+				/*
+				 * Commit transaction
+				 */
+				context.complete();
+
+				/*
+				 * Performance logging
+				 */
+				long endTime = System.currentTimeMillis();
+				log.info("#Total time taken to update fields : {} ms", (endTime - startTime));
+
+				/*
+				 * Success response
+				 */
+				return new UploadResponse(null, UploadStatus.SUCCESS);
+			}
+
+			return uploadResp;
+
+		} /*
+			 * Global catch block is added to handle all unexpected errors in one place. It
+			 * replaces multiple catch blocks from legacy code.
+			 *
+			 * If any exception occurs: - transaction is aborted (no partial data saved) -
+			 * error is logged - proper response is returned (500)
+			 *
+			 * This keeps the code clean and ensures consistent error handling.
+			 */
+		catch (Exception e) {
+
+			if (context != null && context.isValid()) {
+				context.abort();
+			}
+
+			if (request.getFile() != null && !request.getFile().isEmpty()) {
+				log.error("Could not create bitstream in item. [{}]", request.toString(), e);
+			} else {
+				log.error("Could not find item with provided data. [{}]", request.toString(), e);
+			}
+
+			return new UploadResponse(null, UploadStatus.INTERNAL_SERVER_ERROR);
+
+		} finally {
+
+			// Close input stream
+			if (inputStream != null) {
+				try {
+					inputStream.close();
+				} catch (IOException e) {
+					log.error("Error closing input stream", e);
+				}
+			}
+
+			// Clear temporary map
+			if (unconvertedFileMap != null && !unconvertedFileMap.isEmpty()) {
+				unconvertedFileMap.clear();
+			}
+
+			// Deletes the temporary file/directory created during file processing
+			cleanupTempFile(tempFile);
+
+			// Ensures context is safely closed/aborted if not already completed
+			processFinally(context);
+		}
+	}
+
+	private void cleanupTempFile(File tempFile) {
+
+		if (tempFile != null && tempFile.exists()) {
+
+			try {
+
+				// If tempFile is a directory -> force delete (same as legacy)
+				if (tempFile.isDirectory()) {
+
+					FileUtils.forceDelete(tempFile);
+
+				}
+				// If tempFile is a file -> normal delete (same as legacy)
+				else if (!tempFile.delete()) {
+
+					log.error("Not able to delete temp file.");
+				}
+
+			} catch (IOException e) {
+
+				log.error("Error in deleting temp sub dir: {}", tempFile.getName(), e);
 			}
 		}
+	}
 
-		return null;
+	private void processFinally(Context context) {
+
+		if (context == null) {
+			return;
+		}
+
+		try {
+
+			/*
+			 * If context is still valid (not completed), abort to prevent partial DB
+			 * transaction
+			 */
+			if (context.isValid()) {
+				log.warn(
+						"Context was not completed properly. Aborting now. Possible missed complete() or exception flow.");
+				context.abort();
+			}
+
+		} catch (Exception e) {
+			log.error("Error during context final cleanup", e);
+		}
 	}
 
 	private byte[] decodeFile(String base64File) {
@@ -419,6 +865,10 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	}
 
 	private String validateFileExtension(String documentName, String fileType) {
+
+		if (documentName == null || fileType == null) {
+			return null;
+		}
 
 		String extension = FilenameUtils.getExtension(documentName);
 		String cleanName = FilenameUtils.removeExtension(documentName);
@@ -787,31 +1237,88 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 		} else {
 
-			// If item was NOT found in Solr:
+			// If item was NOT found in Solr:we fallback to database search
 			// This usually happens if item is not indexed yet or index is out-of-date
 
 			// Log message for debugging (helps track fallback cases)
 			log.info("Finding entry in database for : " + searchValue);
 
-			// Execute SQL query using JdbcTemplate (Spring way, replaces DatabaseManager)
-			// ps -> sets parameter value in query
-			// rs -> extracts "item_id" column from result set
-			List<Integer> itemIds = jdbcTemplate.query(selectQuery, ps -> ps.setString(1, searchValue),
-					(rs, rowNum) -> rs.getInt("item_id"));
+			// Based on the type of search (PAN, PRAN, ACK, etc.), we call the correct DAO
+			switch (searchWith) {
 
-			// Check if database returned any matching rows
-			if (!itemIds.isEmpty()) {
+			case UploadConstants.ACK_NO:
 
-				// Extract item_id
-				Integer itemId = itemIds.get(0);
+				// Fetch mapping entity using ACK number
+				Item2AckNo ackEntity = ackDAO.findByAckNo(context, searchValue);
 
-				// Fetch Item using native query
-				List<Item> items = itemService.findByCustomNativeQuery(context,
-						"SELECT * FROM item WHERE item_id = " + itemId);
-
-				if (!items.isEmpty()) {
-					item = items.get(0);
+				// If found, get the linked Item object
+				if (ackEntity != null) {
+					item = ackEntity.getItem();
 				}
+				break;
+
+			case UploadConstants.PRAN:
+
+				Item2Pran pranEntity = pranDAO.findByPran(context, searchValue);
+
+				if (pranEntity != null) {
+					item = pranEntity.getItem();
+				}
+				break;
+
+			case UploadConstants.PAN:
+
+				Item2Pan panEntity = panDAO.findByPan(context, searchValue);
+
+				if (panEntity != null) {
+					item = panEntity.getItem();
+				}
+				break;
+
+			case UploadConstants.AGENCY_N_AGENT_PAN:
+
+				Item2AgentAgencyPan agencyPanEntity = agencyPanDAO.findByPan(context, searchValue);
+
+				if (agencyPanEntity != null) {
+					item = agencyPanEntity.getItem();
+				}
+				break;
+
+			case UploadConstants.PRIMARY_NO:
+
+				Item2Primary primaryEntity = primaryDAO.find(context, searchValue, searchValue2);
+
+				if (primaryEntity != null) {
+					item = primaryEntity.getItem();
+				}
+				break;
+
+			case UploadConstants.CHO_NO:
+
+				Item2Corporate corporateEntity = corporateDAO.findByChoNo(context, searchValue);
+
+				if (corporateEntity != null) {
+					item = corporateEntity.getItem();
+				}
+				break;
+
+			case UploadConstants.AGENCY_ID:
+
+				Item2Agency agencyEntity = agencyDAO.findByAgencyId(context, searchValue);
+
+				if (agencyEntity != null) {
+					item = agencyEntity.getItem();
+				}
+				break;
+
+			case UploadConstants.AGENT_ID:
+
+				Item2Agent agentEntity = agentDAO.findByAgentId(context, searchValue);
+
+				if (agentEntity != null) {
+					item = agentEntity.getItem();
+				}
+				break;
 			}
 		}
 
@@ -884,7 +1391,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 		} else {
 
 			// Default collection for normal items
-			collection = collectionService.find(context, defaultCollectionUUID);
+			collection = collectionService.find(context,defaultCollectionUUID);
 		}
 
 		// Safety check (same as legacy "if(col != null)")
@@ -1221,7 +1728,7 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 
 				UUID currentItemId = item != null ? item.getID() : null;
 
-				// SAME LOGIC AS PAN 
+				// SAME LOGIC AS PAN
 				if (agencyPanItem != null && currentItemId != null && !agencyPanItem.getID().equals(currentItemId)) {
 
 					context.abort();
@@ -1362,8 +1869,9 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 		} catch (ParseException e) {
 
 			// 4. Handle invalid date input
-			throw new WebApplicationException(
-					Response.status(Response.Status.BAD_REQUEST).entity(new UploadResponse(Response.Status.BAD_REQUEST.getStatusCode(), "Invalid createdDate format")).build());
+			throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).entity(
+					new UploadResponse(Response.Status.BAD_REQUEST.getStatusCode(), "Invalid createdDate format"))
+					.build());
 		}
 	}
 
@@ -1399,15 +1907,10 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 				// If item related to primary not same -> THROW ERROR
 				if (!existingItemId.equals(item.getID())) {
 
-					throw new WebApplicationException(
-					        Response.status(Response.Status.BAD_REQUEST)
-					                .entity(new UploadResponse(
-					                        Response.Status.BAD_REQUEST.getStatusCode(),
-					                        primaryType + "-" + primary +
-					                                " already exists in different " + itemType))
-					                .type("application/json")
-					                .build()
-					);
+					throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST)
+							.entity(new UploadResponse(Response.Status.BAD_REQUEST.getStatusCode(),
+									primaryType + "-" + primary + " already exists in different " + itemType))
+							.type("application/json").build());
 				}
 			}
 		}
@@ -1420,7 +1923,8 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 			updateField(context, item, UploadConstants.PAN, request.getPan(), null, null);
 			updateField(context, item, UploadConstants.CORP_NAME, request.getCorpName(), null, null);
 			updateField(context, item, UploadConstants.CHO_NO_STA, request.getChoNo(), null, null);
-			updateField(context, item, UploadConstants.CBO_DETAILS, request.getCboNo(), request.getCboName(),request.getChoNo());
+			updateField(context, item, UploadConstants.CBO_DETAILS, request.getCboNo(), request.getCboName(),
+					request.getChoNo());
 			break;
 
 		case UploadConstants.ITEM_TYPE_2:
@@ -1430,7 +1934,8 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 			updateField(context, item, UploadConstants.CONTACT_NO, request.getContactNo(), null, null);
 			updateField(context, item, UploadConstants.AADHAAR, request.getAadhaar(), null, null);
 			updateField(context, item, UploadConstants.CHO_NO, request.getChoNo(), null, null);
-			updateField(context, item, UploadConstants.CBO_DETAILS, request.getCboNo(), request.getCboName(),request.getChoNo());
+			updateField(context, item, UploadConstants.CBO_DETAILS, request.getCboNo(), request.getCboName(),
+					request.getChoNo());
 			updateField(context, item, UploadConstants.PRAN, request.getPran(), null, null);
 			break;
 
@@ -1485,31 +1990,34 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	}
 
 	/*
-	 * This method handles adding PRIMARY metadata to the item.
-	 * It follows legacy behavior:
-	 * 1. Add primary type (dc.primary.type) only if it does not already exist (avoid duplicates)
-	 * 2. Always append primary value (dc.primary) since it supports multiple values
+	 * This method handles adding PRIMARY metadata to the item. It follows legacy
+	 * behavior: 1. Add primary type (dc.primary.type) only if it does not already
+	 * exist (avoid duplicates) 2. Always append primary value (dc.primary) since it
+	 * supports multiple values
 	 */
 	private void addPrimaryMetadata(Context context, Item item, String primary, String primaryType)
-	        throws SQLException {
+			throws SQLException {
 
-	    // Fetch all existing "dc.primary.type" metadata values from the item
-	    List<MetadataValue> existingTypes = itemService.getMetadata(item, "dc", "primary", "type", Item.ANY);
+		// Fetch all existing "dc.primary.type" metadata values from the item
+		List<MetadataValue> existingTypes = itemService.getMetadata(item, "dc", "primary", "type", Item.ANY);
 
-	    // Check if the given primaryType already exists (case-insensitive comparison)
-	    // existingTypes.stream().anyMatch(condition) -> check if ANY item in the list satisfies this condition
-	    //this is equivalent to the loop + duplicate check in legacy
-	    boolean exists = existingTypes.stream().anyMatch(m -> m.getValue() != null && m.getValue().equalsIgnoreCase(primaryType));
-	    
-	    // If primaryType is not already present, add it
-	    // (prevents duplicate values in metadata), this is skipped above boolean returns true
-	    if (!exists) {
-	        itemService.addMetadata(context, item, "dc", "primary", "type", null, primaryType);
-	    }
+		// Check if the given primaryType already exists (case-insensitive comparison)
+		// existingTypes.stream().anyMatch(condition) -> check if ANY item in the list
+		// satisfies this condition
+		// this is equivalent to the loop + duplicate check in legacy
+		boolean exists = existingTypes.stream()
+				.anyMatch(m -> m.getValue() != null && m.getValue().equalsIgnoreCase(primaryType));
 
-	    // Add primary value to "dc.primary"
-	    // This is always appended (multi-valued field), not replaced
-	    itemService.addMetadata(context, item, "dc", "primary", null, null, primary);
+		// If primaryType is not already present, add it
+		// (prevents duplicate values in metadata), this is skipped above boolean
+		// returns true
+		if (!exists) {
+			itemService.addMetadata(context, item, "dc", "primary", "type", null, primaryType);
+		}
+
+		// Add primary value to "dc.primary"
+		// This is always appended (multi-valued field), not replaced
+		itemService.addMetadata(context, item, "dc", "primary", null, null, primary);
 	}
 
 	private void updateField(Context context, Item item, String field, String value1, String value2, String value3)
@@ -1658,9 +2166,110 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	private void addIfMissing(Context context, Item item, String schema, String element, String qualifier, String value)
 			throws SQLException {
 
-		if (value != null && !value.trim().isEmpty() && 
-			itemService.getMetadataFirstValue(item, schema, element, qualifier, Item.ANY) == null) {
+		if (value != null && !value.trim().isEmpty()
+				&& itemService.getMetadataFirstValue(item, schema, element, qualifier, Item.ANY) == null) {
 			itemService.addMetadata(context, item, schema, element, qualifier, null, value);
+		}
+	}
+
+	/**
+	 * Create bitstream policy (1:1 legacy parity)
+	 *
+	 * Replaces UploadUtil.createBitstreamPolicy()
+	 */
+	private void createBitstreamPolicy(Context context, Bitstream dspaceBitstream, String groupId, Integer year,
+			Integer month, Integer day) throws SQLException, AuthorizeException {
+
+		/*
+		 * Get all bundles of this bitstream Same as: Bundle[] bundles =
+		 * dspaceBitstream.getBundles();
+		 */
+		List<Bundle> bundles = dspaceBitstream.getBundles();
+
+		for (Bundle bundle : bundles) {
+
+			/*
+			 * In legacy, policies were fetched from Bundle using getBitstreamPolicies(). In
+			 * DSpace 9, policies are linked directly to the bitstream (DSpaceObject).
+			 *
+			 * So we use resourcePolicyService to fetch policies for this bitstream.
+			 */
+			List<ResourcePolicy> policies = resourcePolicyService.find(context, dspaceBitstream);
+
+			/*
+			 * Remove default policies for THIS bitstream
+			 */
+			List<ResourcePolicy> toRemove = new ArrayList<>();
+
+			for (ResourcePolicy policy : policies) {
+				if (policy.getdSpaceObject() != null
+						&& policy.getdSpaceObject().getID().equals(dspaceBitstream.getID())) {
+
+					toRemove.add(policy);
+				}
+			}
+
+			/*
+			 * Remove policies using service
+			 */
+			for (ResourcePolicy policy : toRemove) {
+				resourcePolicyService.delete(context, policy);
+			}
+
+			/*
+			 * Create new policy
+			 */
+			Group group = groupService.find(context, UUID.fromString(groupId));
+
+			if (group != null) {
+
+				/*
+				 * Create policy (group-based) ePerson = null (same as legacy group-only policy)
+				 */
+				ResourcePolicy newPolicy = resourcePolicyService.create(context, null, group);
+
+				/*
+				 * Set action (READ access)
+				 */
+				newPolicy.setAction(Constants.READ);
+
+				/*
+				 * Link this policy to the current bitstream
+				 *
+				 * In legacy code, this was done using: setResource + setResourceID +
+				 * setResourceType
+				 *
+				 * In DSpace 9, all of that is handled by a single method: setdSpaceObject()
+				 *
+				 * This automatically: - connects the policy to the bitstream - sets the correct
+				 * resource type
+				 *
+				 * So this line replaces all 3 legacy steps
+				 */
+				newPolicy.setdSpaceObject(dspaceBitstream);
+
+				/*
+				 * Apply start date (same as before), In legacy code, Date was used with methods
+				 * like setYear(), setMonth(), etc. However, those methods are deprecated. In
+				 * DSpace 9, the entity uses LocalDate, which represents only the date (no time
+				 * or timezone), making it simpler and more accurate for this use case.
+				 */
+				if (year != null || month != null || day != null) {
+
+					int y = (year != null) ? year : LocalDate.now().getYear();
+					int m = (month != null) ? month : 1;
+					int d = (day != null) ? day : 1;
+
+					LocalDate startDate = LocalDate.of(y, m, d);
+
+					newPolicy.setStartDate(startDate);
+				}
+
+				/*
+				 * Save policy
+				 */
+				resourcePolicyService.update(context, newPolicy);
+			}
 		}
 	}
 
@@ -1669,22 +2278,19 @@ public class SingleUploadServiceImpl implements SingleUploadService {
 	 */
 	private void normalizeInputs(SingleUploadRequest request) {
 
+		log.info("NORMALIZE INPUTS CALLED");
 		request.setBundle(trim(request.getBundle()));
 		request.setFile(trim(request.getFile()));
-
-		if (request.getSource() != null) {
-			request.setSource(request.getSource().trim());
-		}
+		request.setSource(trim(request.getSource()));
 
 		if (request.getMetadata() != null) {
-
-			String title = request.getMetadata().get("dc.title");
-
-			if (title != null) {
-				request.getMetadata().put("dc.title", title.trim());
+			for (Map.Entry<String, String> entry : request.getMetadata().entrySet()) {
+				if (entry.getValue() != null) {
+					entry.setValue(entry.getValue().trim());
+				}
 			}
 		}
-
+		
 		// UploadBitstream normalization
 
 		request.setCorporateAckNo(trim(request.getCorporateAckNo()).toUpperCase(Locale.ROOT));

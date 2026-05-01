@@ -18,7 +18,7 @@ import org.dspace.core.Constants;
 @Table(name = "item2primary")
 public class Item2Primary extends DSpaceObject {
 
-    @Id
+    
     @Column(name = "primary_id")
     private String primaryId;
 

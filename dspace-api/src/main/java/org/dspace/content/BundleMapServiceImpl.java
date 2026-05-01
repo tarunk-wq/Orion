@@ -91,4 +91,21 @@ public class BundleMapServiceImpl implements BundleMapService {
             bundleMapDAO.delete(context, map);
         }
     }
+    
+    /*
+     * Fetch list of BundleMap entries and return first match.
+     * Mimics legacy SQL querySingle() (single row expected).
+     */
+    @Override
+    public BundleMap findFirstByBundle(Context context, String bundle) throws SQLException {
+
+        List<BundleMap> list = bundleMapDAO.findByBundle(context, bundle);
+
+        if (list == null || list.isEmpty()) {
+            return null;
+        }
+
+        // Legacy behavior → take first row
+        return list.get(0);
+    }
 }

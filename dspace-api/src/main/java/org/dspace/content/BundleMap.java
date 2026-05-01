@@ -1,86 +1,79 @@
 package org.dspace.content;
 
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Table;
 import jakarta.persistence.Column;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.UniqueConstraint;
 
-import java.util.UUID;
+import org.dspace.core.Constants;
 
 /**
  * Hibernate Entity for bundle_map table.
  *
- * includes:
- * - bundle
- * - parent bundle name
- * - child bundle name
+ * includes: - bundle - parent bundle name - child bundle name
  */
 @Entity
 @Table(name = "bundle_map", uniqueConstraints = {
-        // Prevent duplicate parent-child mapping
-        @UniqueConstraint(columnNames = { "bundle", "parent_bundle_name", "child_bundle_name"
-        })
-})
-public class BundleMap {
+		// Prevent duplicate parent-child mapping
+		@UniqueConstraint(columnNames = { "bundle", "parent_bundle_name", "child_bundle_name" }) })
+public class BundleMap extends DSpaceObject {
 
-    @Id
-    @GeneratedValue
-    private UUID id;
+	/**
+	 * Root bundle name Example: A|B
+	 */
+	@Column(name = "bundle", nullable = false)
+	private String bundle;
 
-    /**
-     * Root bundle name
-     * Example: A|B
-     */
-    @Column(name = "bundle", nullable = false)
-    private String bundle;
+	/**
+	 * Parent bundle name Example: A
+	 */
+	@Column(name = "parent_bundle_name", nullable = false)
+	private String parentBundleName;
 
-    /**
-     * Parent bundle name
-     * Example: A
-     */
-    @Column(name = "parent_bundle_name", nullable = false)
-    private String parentBundleName;
+	/**
+	 * Child bundle name Example: B
+	 */
+	@Column(name = "child_bundle_name", nullable = false)
+	private String childBundleName;
 
-    /**
-     * Child bundle name
-     * Example: B
-     */
-    @Column(name = "child_bundle_name", nullable = false)
-    private String childBundleName;
+	// Required constructor for DSpaceObject
+	protected BundleMap() {
+		super();
+	}
 
-    protected BundleMap() {
-    }
+	// Getters and Setters
 
-    // Getters and Setters
+	public String getBundle() {
+		return bundle;
+	}
 
-    public UUID getId() {
-        return id;
-    }
+	public void setBundle(String bundle) {
+		this.bundle = bundle;
+	}
 
-    public String getBundle() {
-        return bundle;
-    }
+	public String getParentBundleName() {
+		return parentBundleName;
+	}
 
-    public void setBundle(String bundle) {
-        this.bundle = bundle;
-    }
+	public void setParentBundleName(String parentBundleName) {
+		this.parentBundleName = parentBundleName;
+	}
 
-    public String getParentBundleName() {
-        return parentBundleName;
-    }
+	public String getChildBundleName() {
+		return childBundleName;
+	}
 
-    public void setParentBundleName(String parentBundleName) {
-        this.parentBundleName = parentBundleName;
-    }
+	public void setChildBundleName(String childBundleName) {
+		this.childBundleName = childBundleName;
+	}
 
-    public String getChildBundleName() {
-        return childBundleName;
-    }
+	@Override
+	public String getName() {
+		return bundle;
+	}
 
-    public void setChildBundleName(String childBundleName) {
-        this.childBundleName = childBundleName;
-    }
+	@Override
+	public int getType() {
+		return Constants.ITEM;
+	}
 }

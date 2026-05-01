@@ -27,6 +27,7 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.MetadataFieldService;
 import org.dspace.content.service.MetadataSchemaService;
 import org.dspace.content.service.MetadataValueService;
+import org.dspace.content.service.OriginalDocMapService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
 import org.dspace.content.service.SiteService;
@@ -35,165 +36,173 @@ import org.dspace.eperson.service.SubscribeService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Factory implementation to get services for the content package, use ContentServiceFactory.getInstance() to
- * retrieve an implementation
+ * Factory implementation to get services for the content package, use
+ * ContentServiceFactory.getInstance() to retrieve an implementation
  *
  * @author kevinvandevelde at atmire.com
  */
 public class ContentServiceFactoryImpl extends ContentServiceFactory {
 
-    @Autowired(required = true)
-    private List<DSpaceObjectService<? extends DSpaceObject>> dSpaceObjectServices;
-    @Autowired(required = true)
-    private List<DSpaceObjectLegacySupportService<? extends DSpaceObject>> dSpaceObjectLegacySupportServices;
+	@Autowired(required = true)
+	private List<DSpaceObjectService<? extends DSpaceObject>> dSpaceObjectServices;
+	@Autowired(required = true)
+	private List<DSpaceObjectLegacySupportService<? extends DSpaceObject>> dSpaceObjectLegacySupportServices;
 
-    @Autowired(required = true)
-    private BitstreamFormatService bitstreamFormatService;
-    @Autowired(required = true)
-    private BitstreamService bitstreamService;
-    @Autowired(required = true)
-    private BundleService bundleService;
-    @Autowired(required = true)
-    private BundleMapService bundleMapService;
-    @Autowired(required = true)
-    private ItemService itemService;
-    @Autowired(required = true)
-    private CollectionService collectionService;
-    @Autowired(required = true)
-    private CommunityService communityService;
-    @Autowired(required = true)
-    private MetadataSchemaService metadataSchemaService;
-    @Autowired(required = true)
-    private MetadataFieldService metadataFieldService;
-    @Autowired(required = true)
-    private MetadataValueService metadataValueService;
-    @Autowired(required = true)
-    private WorkspaceItemService workspaceItemService;
-    @Autowired(required = true)
-    private InstallItemService installItemService;
-    @Autowired(required = true)
-    private SiteService siteService;
-    @Autowired(required = true)
-    private SubscribeService subscribeService;
-    @Autowired(required = true)
-    private RelationshipService relationshipService;
-    @Autowired(required = true)
-    private RelationshipTypeService relationshipTypeService;
-    @Autowired(required = true)
-    private RelationshipMetadataService relationshipMetadataService;
-    @Autowired(required = true)
-    private EntityTypeService entityTypeService;
-    @Autowired(required = true)
-    private EntityService entityService;
-    @Autowired(required = true)
-    private DuplicateDetectionService duplicateDetectionService;
+	@Autowired(required = true)
+	private BitstreamFormatService bitstreamFormatService;
+	@Autowired(required = true)
+	private BitstreamService bitstreamService;
+	@Autowired(required = true)
+	private BundleService bundleService;
+	@Autowired(required = true)
+	private BundleMapService bundleMapService;
+	@Autowired(required = true)
+	private OriginalDocMapService originalDocMapService;
+	@Autowired(required = true)
+	private ItemService itemService;
+	@Autowired(required = true)
+	private CollectionService collectionService;
+	@Autowired(required = true)
+	private CommunityService communityService;
+	@Autowired(required = true)
+	private MetadataSchemaService metadataSchemaService;
+	@Autowired(required = true)
+	private MetadataFieldService metadataFieldService;
+	@Autowired(required = true)
+	private MetadataValueService metadataValueService;
+	@Autowired(required = true)
+	private WorkspaceItemService workspaceItemService;
+	@Autowired(required = true)
+	private InstallItemService installItemService;
+	@Autowired(required = true)
+	private SiteService siteService;
+	@Autowired(required = true)
+	private SubscribeService subscribeService;
+	@Autowired(required = true)
+	private RelationshipService relationshipService;
+	@Autowired(required = true)
+	private RelationshipTypeService relationshipTypeService;
+	@Autowired(required = true)
+	private RelationshipMetadataService relationshipMetadataService;
+	@Autowired(required = true)
+	private EntityTypeService entityTypeService;
+	@Autowired(required = true)
+	private EntityService entityService;
+	@Autowired(required = true)
+	private DuplicateDetectionService duplicateDetectionService;
 
-    @Override
-    public List<DSpaceObjectService<? extends DSpaceObject>> getDSpaceObjectServices() {
-        return dSpaceObjectServices;
-    }
+	@Override
+	public List<DSpaceObjectService<? extends DSpaceObject>> getDSpaceObjectServices() {
+		return dSpaceObjectServices;
+	}
 
-    @Override
-    public List<DSpaceObjectLegacySupportService<? extends DSpaceObject>> getDSpaceObjectLegacySupportServices() {
-        return dSpaceObjectLegacySupportServices;
-    }
+	@Override
+	public List<DSpaceObjectLegacySupportService<? extends DSpaceObject>> getDSpaceObjectLegacySupportServices() {
+		return dSpaceObjectLegacySupportServices;
+	}
 
-    @Override
-    public BitstreamFormatService getBitstreamFormatService() {
-        return bitstreamFormatService;
-    }
+	@Override
+	public BitstreamFormatService getBitstreamFormatService() {
+		return bitstreamFormatService;
+	}
 
-    @Override
-    public BitstreamService getBitstreamService() {
-        return bitstreamService;
-    }
+	@Override
+	public BitstreamService getBitstreamService() {
+		return bitstreamService;
+	}
 
-    @Override
-    public BundleService getBundleService() {
-        return bundleService;
-    }
+	@Override
+	public BundleService getBundleService() {
+		return bundleService;
+	}
 
-    @Override
-    public BundleMapService getBundleMapService() {
-        return bundleMapService;
-    }
-    @Override
-    public CollectionService getCollectionService() {
-        return collectionService;
-    }
+	@Override
+	public BundleMapService getBundleMapService() {
+		return bundleMapService;
+	}
 
-    @Override
-    public CommunityService getCommunityService() {
-        return communityService;
-    }
+	@Override
+	public OriginalDocMapService getOriginalDocMapService() {
+		return originalDocMapService;
+	}
 
-    @Override
-    public ItemService getItemService() {
-        return itemService;
-    }
+	@Override
+	public CollectionService getCollectionService() {
+		return collectionService;
+	}
 
-    @Override
-    public MetadataSchemaService getMetadataSchemaService() {
-        return metadataSchemaService;
-    }
+	@Override
+	public CommunityService getCommunityService() {
+		return communityService;
+	}
 
-    @Override
-    public MetadataFieldService getMetadataFieldService() {
-        return metadataFieldService;
-    }
+	@Override
+	public ItemService getItemService() {
+		return itemService;
+	}
 
-    @Override
-    public MetadataValueService getMetadataValueService() {
-        return metadataValueService;
-    }
+	@Override
+	public MetadataSchemaService getMetadataSchemaService() {
+		return metadataSchemaService;
+	}
 
-    @Override
-    public WorkspaceItemService getWorkspaceItemService() {
-        return workspaceItemService;
-    }
+	@Override
+	public MetadataFieldService getMetadataFieldService() {
+		return metadataFieldService;
+	}
 
-    @Override
-    public InstallItemService getInstallItemService() {
-        return installItemService;
-    }
+	@Override
+	public MetadataValueService getMetadataValueService() {
+		return metadataValueService;
+	}
 
-    @Override
-    public SiteService getSiteService() {
-        return siteService;
-    }
+	@Override
+	public WorkspaceItemService getWorkspaceItemService() {
+		return workspaceItemService;
+	}
 
-    @Override
-    public SubscribeService getSubscribeService() {
-        return subscribeService ;
-    }
+	@Override
+	public InstallItemService getInstallItemService() {
+		return installItemService;
+	}
 
-    @Override
-    public RelationshipTypeService getRelationshipTypeService() {
-        return relationshipTypeService;
-    }
+	@Override
+	public SiteService getSiteService() {
+		return siteService;
+	}
 
-    @Override
-    public RelationshipService getRelationshipService() {
-        return relationshipService;
-    }
+	@Override
+	public SubscribeService getSubscribeService() {
+		return subscribeService;
+	}
 
-    @Override
-    public EntityTypeService getEntityTypeService() {
-        return entityTypeService;
-    }
+	@Override
+	public RelationshipTypeService getRelationshipTypeService() {
+		return relationshipTypeService;
+	}
 
-    @Override
-    public EntityService getEntityService() {
-        return entityService;
-    }
+	@Override
+	public RelationshipService getRelationshipService() {
+		return relationshipService;
+	}
 
-    @Override
-    public RelationshipMetadataService getRelationshipMetadataService() {
-        return relationshipMetadataService;
-    }
+	@Override
+	public EntityTypeService getEntityTypeService() {
+		return entityTypeService;
+	}
 
-    @Override
-    public DuplicateDetectionService getDuplicateDetectionService() {
-        return duplicateDetectionService;
-    }
+	@Override
+	public EntityService getEntityService() {
+		return entityService;
+	}
+
+	@Override
+	public RelationshipMetadataService getRelationshipMetadataService() {
+		return relationshipMetadataService;
+	}
+
+	@Override
+	public DuplicateDetectionService getDuplicateDetectionService() {
+		return duplicateDetectionService;
+	}
 }

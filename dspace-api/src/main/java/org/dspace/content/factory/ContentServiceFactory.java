@@ -30,6 +30,7 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.MetadataFieldService;
 import org.dspace.content.service.MetadataSchemaService;
 import org.dspace.content.service.MetadataValueService;
+import org.dspace.content.service.OriginalDocMapService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
 import org.dspace.content.service.SiteService;
@@ -39,122 +40,122 @@ import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.workflow.factory.WorkflowServiceFactory;
 
 /**
- * Abstract factory to get services for the content package, use ContentServiceFactory.getInstance() to retrieve an
- * implementation
+ * Abstract factory to get services for the content package, use
+ * ContentServiceFactory.getInstance() to retrieve an implementation
  *
  * @author kevinvandevelde at atmire.com
  */
 public abstract class ContentServiceFactory {
 
-    public abstract List<DSpaceObjectService<? extends DSpaceObject>> getDSpaceObjectServices();
+	public abstract List<DSpaceObjectService<? extends DSpaceObject>> getDSpaceObjectServices();
 
-    public abstract List<DSpaceObjectLegacySupportService<? extends DSpaceObject>>
-        getDSpaceObjectLegacySupportServices();
+	public abstract List<DSpaceObjectLegacySupportService<? extends DSpaceObject>> getDSpaceObjectLegacySupportServices();
 
-    public abstract BitstreamFormatService getBitstreamFormatService();
+	public abstract BitstreamFormatService getBitstreamFormatService();
 
-    public abstract BitstreamService getBitstreamService();
+	public abstract BitstreamService getBitstreamService();
 
-    public abstract BundleService getBundleService();
-    
-    public abstract BundleMapService getBundleMapService();
+	public abstract BundleService getBundleService();
 
-    public abstract CollectionService getCollectionService();
+	public abstract BundleMapService getBundleMapService();
 
-    public abstract CommunityService getCommunityService();
+	public abstract OriginalDocMapService getOriginalDocMapService();
 
-    public abstract ItemService getItemService();
+	public abstract CollectionService getCollectionService();
 
-    public abstract MetadataFieldService getMetadataFieldService();
+	public abstract CommunityService getCommunityService();
 
-    public abstract MetadataSchemaService getMetadataSchemaService();
+	public abstract ItemService getItemService();
 
-    public abstract MetadataValueService getMetadataValueService();
+	public abstract MetadataFieldService getMetadataFieldService();
 
-    public abstract WorkspaceItemService getWorkspaceItemService();
+	public abstract MetadataSchemaService getMetadataSchemaService();
 
-    public abstract InstallItemService getInstallItemService();
+	public abstract MetadataValueService getMetadataValueService();
 
-    public abstract SiteService getSiteService();
+	public abstract WorkspaceItemService getWorkspaceItemService();
 
-    public abstract SubscribeService getSubscribeService();
+	public abstract InstallItemService getInstallItemService();
 
-    /**
-     * Return the implementation of the RelationshipTypeService interface
-     *
-     * @return the RelationshipTypeService
-     */
-    public abstract RelationshipTypeService getRelationshipTypeService();
+	public abstract SiteService getSiteService();
 
-    /**
-     * Return the implementation of the RelationshipService interface
-     *
-     * @return the RelationshipService
-     */
-    public abstract RelationshipService getRelationshipService();
+	public abstract SubscribeService getSubscribeService();
 
-    /**
-     * Return the implementation of the EntityTypeService interface
-     *
-     * @return the EntityTypeService
-     */
-    public abstract EntityTypeService getEntityTypeService();
+	/**
+	 * Return the implementation of the RelationshipTypeService interface
+	 *
+	 * @return the RelationshipTypeService
+	 */
+	public abstract RelationshipTypeService getRelationshipTypeService();
 
-    /**
-     * Return the implementation of the EntityService interface
-     *
-     * @return the EntityService
-     */
-    public abstract EntityService getEntityService();
+	/**
+	 * Return the implementation of the RelationshipService interface
+	 *
+	 * @return the RelationshipService
+	 */
+	public abstract RelationshipService getRelationshipService();
 
-    public abstract RelationshipMetadataService getRelationshipMetadataService();
+	/**
+	 * Return the implementation of the EntityTypeService interface
+	 *
+	 * @return the EntityTypeService
+	 */
+	public abstract EntityTypeService getEntityTypeService();
 
-    public InProgressSubmissionService getInProgressSubmissionService(InProgressSubmission inProgressSubmission) {
-        if (inProgressSubmission instanceof WorkspaceItem) {
-            return getWorkspaceItemService();
-        } else {
-            return WorkflowServiceFactory.getInstance().getWorkflowItemService();
-        }
-    }
+	/**
+	 * Return the implementation of the EntityService interface
+	 *
+	 * @return the EntityService
+	 */
+	public abstract EntityService getEntityService();
 
-    /**
-     * Return the implementation of the DuplicateDetectionService interface
-     *
-     * @return the DuplicateDetectionService
-     */
-    public abstract DuplicateDetectionService getDuplicateDetectionService();
+	public abstract RelationshipMetadataService getRelationshipMetadataService();
 
-    public <T extends DSpaceObject> DSpaceObjectService<T> getDSpaceObjectService(T dso) {
-        return getDSpaceObjectService(dso.getType());
-    }
+	public InProgressSubmissionService getInProgressSubmissionService(InProgressSubmission inProgressSubmission) {
+		if (inProgressSubmission instanceof WorkspaceItem) {
+			return getWorkspaceItemService();
+		} else {
+			return WorkflowServiceFactory.getInstance().getWorkflowItemService();
+		}
+	}
 
-    @SuppressWarnings("unchecked")
-    public <T extends DSpaceObject> DSpaceObjectService<T> getDSpaceObjectService(int type) {
-        for (int i = 0; i < getDSpaceObjectServices().size(); i++) {
-            DSpaceObjectService<? extends DSpaceObject> objectService = getDSpaceObjectServices().get(i);
-            if (objectService.getSupportsTypeConstant() == type) {
-                return (DSpaceObjectService<T>) objectService;
-            }
-        }
-        throw new UnsupportedOperationException("Unknown DSpace type: " + type);
-    }
+	/**
+	 * Return the implementation of the DuplicateDetectionService interface
+	 *
+	 * @return the DuplicateDetectionService
+	 */
+	public abstract DuplicateDetectionService getDuplicateDetectionService();
 
-    public DSpaceObjectLegacySupportService<? extends DSpaceObject> getDSpaceLegacyObjectService(int type) {
-        for (int i = 0; i < getDSpaceObjectLegacySupportServices().size(); i++) {
-            DSpaceObjectLegacySupportService<? extends DSpaceObject> objectLegacySupportService =
-                getDSpaceObjectLegacySupportServices()
-                    .get(i);
-            if (objectLegacySupportService.getSupportsTypeConstant() == type) {
-                return objectLegacySupportService;
-            }
+	public <T extends DSpaceObject> DSpaceObjectService<T> getDSpaceObjectService(T dso) {
+		return getDSpaceObjectService(dso.getType());
+	}
 
-        }
-        throw new UnsupportedOperationException("Unknown DSpace type: " + type);
-    }
+	@SuppressWarnings("unchecked")
+	public <T extends DSpaceObject> DSpaceObjectService<T> getDSpaceObjectService(int type) {
+		for (int i = 0; i < getDSpaceObjectServices().size(); i++) {
+			DSpaceObjectService<? extends DSpaceObject> objectService = getDSpaceObjectServices().get(i);
+			if (objectService.getSupportsTypeConstant() == type) {
+				return (DSpaceObjectService<T>) objectService;
+			}
+		}
+		throw new UnsupportedOperationException("Unknown DSpace type: " + type);
+	}
 
-    public static ContentServiceFactory getInstance() {
-        return DSpaceServicesFactory.getInstance().getServiceManager()
-                                    .getServiceByName("contentServiceFactory", ContentServiceFactory.class);
-    }
+	public DSpaceObjectLegacySupportService<? extends DSpaceObject> getDSpaceLegacyObjectService(int type) {
+		for (int i = 0; i < getDSpaceObjectLegacySupportServices().size(); i++) {
+			DSpaceObjectLegacySupportService<? extends DSpaceObject> objectLegacySupportService = getDSpaceObjectLegacySupportServices()
+					.get(i);
+			if (objectLegacySupportService.getSupportsTypeConstant() == type) {
+				return objectLegacySupportService;
+			}
+
+		}
+		throw new UnsupportedOperationException("Unknown DSpace type: " + type);
+	}
+
+	public static ContentServiceFactory getInstance() {
+		return DSpaceServicesFactory.getInstance().getServiceManager().getServiceByName("contentServiceFactory",
+				ContentServiceFactory.class);
+	}
 
 }

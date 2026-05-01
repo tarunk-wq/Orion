@@ -19,7 +19,7 @@ import org.dspace.core.Constants;
 public class Item2Agent extends DSpaceObject {
 
     // Agent ID is primary key (same pattern as PAN, PRAN, ACK)
-    @Id
+    
     @Column(name = "agent_id")
     private String agentId;
 

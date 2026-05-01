@@ -19,7 +19,7 @@ import org.dspace.core.Constants;
 public class Item2Corporate extends DSpaceObject {
 
     // CHO number is primary key (same pattern as PAN, PRAN)
-    @Id
+    
     @Column(name = "cho_no")
     private String choNo;
 

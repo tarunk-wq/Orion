@@ -14,7 +14,7 @@ import org.dspace.core.Constants;
 @Table(name = "item2agent_agency_pan")
 public class Item2AgentAgencyPan extends DSpaceObject {
 
-    @Id
+    
     @Column(name = "pan")
     private String pan;
 

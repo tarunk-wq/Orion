@@ -15,7 +15,7 @@ import org.dspace.core.Constants;
 @Table(name = "item2ackno")
 public class Item2AckNo extends DSpaceObject {
 
-    @Id
+    
     @Column(name = "ack_no")
     private String ackNo;
 

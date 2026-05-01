@@ -6,91 +6,91 @@ import org.dspace.content.UploadStatus;
 
 public class UploadResponse {
 
-    private static final int SUCCESS = 000;
-    private static final int FAILURE = 400;
-    private static final int NOTFOUND = 404;
-    private static final int UNAUTHORIZED = 401;
-    private static final int INTERNAL_SERVER_ERROR = 500;
+	private static final int SUCCESS = 200;
+	private static final int FAILURE = 400;
+	private static final int NOTFOUND = 404;
+	private static final int UNAUTHORIZED = 401;
+	private static final int INTERNAL_SERVER_ERROR = 500;
 
-    private UUID documentID;
-    private int errorCode;
-    private String errorDescription;
+	private UUID documentID;
+	private int errorCode;
+	private String errorDescription;
 
-    public UploadResponse() {}
+	public UploadResponse() {
+	}
 
-    public UploadResponse(Bitstream bitstream, UploadStatus status) {
+	public UploadResponse(Bitstream bitstream, UploadStatus status) {
 
-        switch (status) {
+		switch (status) {
 
-            case SUCCESS:
+		case SUCCESS:
 
-                if (bitstream != null) {
-                    this.documentID = bitstream.getID();
-                }
+			if (bitstream != null) {
+				this.documentID = bitstream.getID();
+			}
 
-                this.errorCode = SUCCESS;
-                this.errorDescription = "Successfully uploaded";
-                break;
+			this.errorCode = SUCCESS;
+			this.errorDescription = "Successfully uploaded";
+			break;
 
-            case INVALID_FILEFORMAT:
+		case INVALID_FILEFORMAT:
 
-                this.errorCode = FAILURE;
-                this.errorDescription = "Invalid file format";
-                break;
+			this.errorCode = FAILURE;
+			this.errorDescription = "Invalid file format";
+			break;
 
-            case FILE_FORMAT_MISSMATCH:
+		case FILE_FORMAT_MISSMATCH:
 
-                this.errorCode = FAILURE;
-                this.errorDescription = "File format mismatched";
-                break;
+			this.errorCode = FAILURE;
+			this.errorDescription = "File format mismatched";
+			break;
 
-            case FAILURE:
+		case FAILURE:
 
-                this.errorCode = FAILURE;
-                this.errorDescription = "Failed to upload";
-                break;
+			this.errorCode = FAILURE;
+			this.errorDescription = "Failed to upload";
+			break;
 
-            case NOTFOUND:
+		case NOTFOUND:
 
-                this.errorCode = NOTFOUND;
-                this.errorDescription = "Bundle not Found";
-                break;
+			this.errorCode = NOTFOUND;
+			this.errorDescription = "Item not Found";
+			break;
 
-            case UNAUTHORIZED:
+		case UNAUTHORIZED:
 
-                this.errorCode = UNAUTHORIZED;
-                this.errorDescription = "Unauthorized user";
-                break;
+			this.errorCode = UNAUTHORIZED;
+			this.errorDescription = "Unauthorized user";
+			break;
 
-            case DATA_MISSING:
+		case DATA_MISSING:
 
-                this.errorCode = UNAUTHORIZED;
-                this.errorDescription =
-                        "Please contact orion team to get token and source details";
-                break;
+			this.errorCode = FAILURE;
+			this.errorDescription = "Missing source or token";
+			break;
 
-            case INTERNAL_SERVER_ERROR:
+		case INTERNAL_SERVER_ERROR:
 
-                this.errorCode = INTERNAL_SERVER_ERROR;
-                this.errorDescription = "Internal Server Error";
-                break;
-        }
-    }
-    
-    public UploadResponse(int errorCode, String errorDescription) {
-        this.errorCode = errorCode;
-        this.errorDescription = errorDescription;
-    }
+			this.errorCode = INTERNAL_SERVER_ERROR;
+			this.errorDescription = "Internal Server Error";
+			break;
+		}
+	}
 
-    public UUID getDocumentID() {
-        return documentID;
-    }
+	public UploadResponse(int errorCode, String errorDescription) {
+		this.errorCode = errorCode;
+		this.errorDescription = errorDescription;
+	}
 
-    public int getErrorCode() {
-        return errorCode;
-    }
+	public UUID getDocumentID() {
+		return documentID;
+	}
 
-    public String getErrorDescription() {
-        return errorDescription;
-    }
+	public int getErrorCode() {
+		return errorCode;
+	}
+
+	public String getErrorDescription() {
+		return errorDescription;
+	}
 }

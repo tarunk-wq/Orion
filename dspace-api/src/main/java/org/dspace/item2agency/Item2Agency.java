@@ -19,7 +19,7 @@ import org.dspace.core.Constants;
 public class Item2Agency extends DSpaceObject {
 
     // Agency ID is primary key (same pattern as others)
-    @Id
+    
     @Column(name = "agency_id")
     private String agencyId;
 

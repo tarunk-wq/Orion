@@ -12,7 +12,7 @@ import org.dspace.core.Constants;
 @Table(name = "primarytype")
 public class PrimaryType extends DSpaceObject {
 
-    @Id
+    
     @Column(name = "primary_type_name")
     private String primaryTypeName;
 

@@ -17,7 +17,7 @@ import org.dspace.core.Constants;
 public class Cbo2Cho extends DSpaceObject {
 
     // Using cbo_no as primary key (same pattern as PAN, PRAN, etc.)
-    @Id
+    
     @Column(name = "cbo_no")
     private String cboNo;
 

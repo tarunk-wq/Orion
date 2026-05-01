@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
+import org.dspace.content.UploadStatus;
 import org.dspace.content.dto.SingleUploadRequest;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.content.upload.UploadResponse;
@@ -23,75 +24,75 @@ import org.springframework.web.bind.annotation.*;
 /**
  * SingleUploadRestController
  *
- * Phase 1:
- *  - Context creation
- *  - Basic authorization check
- *  - Input normalization
- *  - Required field validation
- *  - Mapping validation
- *  - Base64 validation
- *
- * item,bundle,bitstream logic (item creation, bundle creation, bitstream)
- * will be implemented in Phase 2.
  */
+
 @RestController
 @RequestMapping("/api/custom/single-upload")
 public class SingleUploadRestController {
 
-    private static final Logger log =
-            LogManager.getLogger(SingleUploadRestController.class);
+	private static final Logger log = LogManager.getLogger(SingleUploadRestController.class);
 
-    @Autowired
-    private BundleMapService bundleMapService;
-    
-    @Autowired
-    private SingleUploadService singleUploadService;
+	@Autowired
+	private BundleMapService bundleMapService;
 
-    @PostMapping
-    public ResponseEntity<?> singleUpload(
-            @RequestBody SingleUploadRequest requestBody,
-            HttpServletRequest request) throws SQLException {
+	@Autowired
+	private SingleUploadService singleUploadService;
 
-        Context context = null;
+	@PostMapping
+	public ResponseEntity<?> singleUpload(@RequestBody SingleUploadRequest requestBody, HttpServletRequest request)
+			throws SQLException {
 
-        try {
+		log.info("API HIT: SINGLE UPLOAD");
+	    log.info("Request Body: {}", requestBody);
+	    System.out.println("SYSTEM OUT HIT");
+		Context context = null;
 
-            // Create DSpace transaction context
-            context = ContextUtil.obtainContext(request);
+		try {
 
-            // Disable authorization temporarily (same as UploadBitstream)
-            context.turnOffAuthorisationSystem();
+			// Create DSpace transaction context
+			context = ContextUtil.obtainContext(request);
 
-            log.info("Single Upload API invoked");
+			// Disable authorization temporarily (same as UploadBitstream)
+			context.turnOffAuthorisationSystem();
 
-            // Pass request to service layer
-            UploadResponse response = singleUploadService.processRequest(context, requestBody, request);
-            
-            if (response != null) {
-                return ResponseEntity.status(HttpStatus.valueOf(response.getErrorCode())).body(response);
-            }
-            
-            context.complete();
+			log.info("Single Upload API invoked");
 
-            return ResponseEntity.ok("Request received");
+			// Pass request to service layer
+			UploadResponse response = singleUploadService.processRequest(context, requestBody, request);
 
-        } catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.valueOf(response.getErrorCode())).body(response);
 
-            if (context != null && context.isValid()) {
-                context.abort();
-            }
+		} catch (Exception e) {
 
-            log.error("Error processing upload request", e);
+			
+			 //Abort transaction 
+			 
+			if (context != null && context.isValid()) {
+				context.abort();
+			}
 
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Internal server error");
+			
+			 //Log based on flow 
+			 
+			if (requestBody != null && requestBody.getFile() != null && !requestBody.getFile().isEmpty()) {
+				log.error("Could not create bitstream in item.", e);
+			} else {
+				log.error("Could not find item with provided data.", e);
+			}
 
-        } finally {
+			
+			 //Return structured response (NOT string)
+			 
+			UploadResponse errorResponse = new UploadResponse(null, UploadStatus.INTERNAL_SERVER_ERROR);
 
-            if (context != null) {
-                context.restoreAuthSystemState();
-            }
-        }
-    }
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+
+		} finally {
+
+			if (context != null) {
+				context.restoreAuthSystemState();
+			}
+		}
+	}
 }
+
